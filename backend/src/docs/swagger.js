@@ -6,5 +6,5 @@ export const swaggerSpec = swaggerJSDoc({
     info: { title: "EcoTrack API", version: "1.0.0" },
     servers: [{ url: "/api" }],
   },
-  apis: [], // you can add JSDoc annotations later; for Eval 01, Postman collection is also acceptable
+  apis: ["./src/routes/*.js"], // you can add JSDoc annotations later; for Eval 01, Postman collection is also acceptable
 });
