@@ -13,5 +13,5 @@ const habitSchema = new mongoose.Schema(
 );
 
 habitSchema.index({ userId: 1, date: 1, type: 1 }, { unique: true });
-
+ 
 export const Habit = mongoose.model("Habit", habitSchema);

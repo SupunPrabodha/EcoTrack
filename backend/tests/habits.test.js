@@ -16,7 +16,7 @@ beforeAll(async () => {
     name: "Test",
     email: "t@t.com",
     password: "Password123!"
-  });
+  }); 
 
   const login = await request(app).post("/api/auth/login").send({
     email: "t@t.com",
