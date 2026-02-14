@@ -12,7 +12,7 @@ export async function createHabit({ userId, type, value, date }) {
     if (e.code === 11000) throw new ApiError(409, "Habit already logged for this date/type");
     throw e;
   }
-}
+} 
 
 export async function listHabits({ userId, page, limit, from, to, type }) {
   const filter = { userId, date: { $gte: from, $lte: to } };

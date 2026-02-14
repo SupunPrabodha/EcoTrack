@@ -13,7 +13,7 @@ export const listHabitsCtrl = asyncHandler(async (req, res) => {
     userId: req.user.userId,
     page: Number(page),
     limit: Number(limit),
-    from: new Date(from),
+    from: new Date(from), 
     to: new Date(to),
     type: type || null
   });
