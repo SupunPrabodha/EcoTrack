@@ -111,7 +111,39 @@ export async function deleteEmissionEntry({ userId, id }) {
 	await entry.deleteOne();
 }
 
+export async function updateEmissionEntry({ userId, id, patch }) {
+	const entry = await EmissionEntry.findOne({ _id: id, userId });
+	if (!entry) throw new ApiError(404, "Emission entry not found");
 
+	if (entry.sourceType === "habit") {
+		throw new ApiError(403, "Habit-derived entries are read-only; update the habit instead");
+	}
+
+	if (patch.date !== undefined) {
+		const d = new Date(patch.date);
+		if (Number.isNaN(d.getTime())) throw new ApiError(400, "Invalid date");
+		entry.date = d;
+	}
+	if (patch.notes !== undefined) entry.notes = patch.notes;
+	if (patch.region !== undefined) entry.region = patch.region;
+	if (patch.habitType !== undefined) entry.habitType = patch.habitType;
+	if (patch.value !== undefined) entry.value = patch.value;
+
+	if (patch.emissionKg !== undefined && patch.emissionKg !== null) {
+		entry.emissionKg = patch.emissionKg;
+		entry.calculationMethod = "local_factor";
+	} else if (patch.habitType !== undefined || patch.value !== undefined || patch.region !== undefined) {
+		if (!entry.habitType || typeof entry.value !== "number") {
+			throw new ApiError(400, "habitType and value required to recompute emissionKg");
+		}
+		const calc = await calculateEmission({ habitType: entry.habitType, value: entry.value, date: entry.date, region: entry.region });
+		entry.emissionKg = calc.emissionKg;
+		entry.calculationMethod = calc.method;
+	}
+
+	await entry.save();
+	return entry;
+}
 
 
 

@@ -53,6 +53,12 @@ export const deleteEmissionCtrl = asyncHandler(async (req, res) => {
 	sendSuccess(res, { message: "Emission entry deleted" });
 });
 
+export const updateEmissionCtrl = asyncHandler(async (req, res) => {
+	const { id } = req.validated.params;
+	const entry = await updateEmissionEntry({ userId: req.user.userId, id, patch: req.validated.body });
+	sendSuccess(res, { data: entry });
+});
+
 export const summaryCtrl = asyncHandler(async (req, res) => {
   const { from, to } = req.validated.query;
   const data = await getSummary(req.user.userId, new Date(from), new Date(to));

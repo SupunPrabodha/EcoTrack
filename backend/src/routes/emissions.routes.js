@@ -6,7 +6,8 @@ import {
   createEmissionCtrl, 
   listEmissionsCtrl,
   deleteEmissionCtrl,
-  getEmissionCtrl, 
+  getEmissionCtrl,
+  updateEmissionCtrl,
   leaderboardCtrl, 
   summaryCtrl, 
   trendsCtrl } from "../controllers/emissions.controller.js";
@@ -64,10 +65,26 @@ const idSchema = z.object({
 	query: z.object({}),
 });
 
+const updateSchema = z.object({
+	body: z
+		.object({
+			habitType: z.enum(HABIT_TYPES).optional(),
+			value: z.number().min(0).optional(),
+			emissionKg: z.number().min(0).nullable().optional(),
+			notes: z.string().max(500).optional(),
+			region: z.string().max(50).optional(),
+			date: z.string().datetime().optional(),
+		})
+		.refine((b) => Object.keys(b).length > 0, { message: "At least one field is required" }),
+	params: z.object({ id: z.string().min(10) }),
+	query: z.object({}),
+});
+
 router.post("/", validate(createSchema), createEmissionCtrl);
 router.get("/", validate(listSchema), listEmissionsCtrl);
 router.get("/:id", validate(idSchema), getEmissionCtrl);
 router.delete("/:id", validate(idSchema), deleteEmissionCtrl);
+router.put("/:id", validate(updateSchema), updateEmissionCtrl);
 router.get("/summary", validate(rangeSchema), summaryCtrl);
 router.get("/trends", validate(rangeSchema), trendsCtrl);
 router.get("/leaderboard", validate(rangeSchema), leaderboardCtrl);
