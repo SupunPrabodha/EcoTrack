@@ -7,6 +7,11 @@ const habitSchema = new mongoose.Schema(
     type: { type: String, enum: HABIT_TYPES, required: true },
     value: { type: Number, required: true, min: 0 },
     emissionKg: { type: Number, required: true, min: 0 },
+    calculationMethod: {
+      type: String,
+      enum: ["carbon_interface", "grid_intensity", "local_factor", "invalid_input", "unknown_type"],
+      default: "local_factor",
+    },
     date: { type: Date, required: true, index: true },
   },
   { timestamps: true }
