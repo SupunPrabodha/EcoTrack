@@ -7,8 +7,9 @@ export const requireAuth = (req, res, next) => {
     ? req.headers.authorization.split(" ")[1]
     : null;
 
-  const token = req.cookies?.accessToken || bearer;
+  const token = req.cookies?.[env.COOKIE_NAME || "accessToken"] || bearer;
   if (!token) return next(new ApiError(401, "Unauthorized"));
+  if (!env.JWT_SECRET) return next(new ApiError(500, "JWT_SECRET is not configured"));
 
   try {
     const decoded = jwt.verify(token, env.JWT_SECRET);

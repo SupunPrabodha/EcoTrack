@@ -13,7 +13,9 @@ ReactDOM.createRoot(document.getElementById("root")).render(
     <QueryClientProvider client={qc}>
       <AuthProvider>
         <BrowserRouter>
-          <App />
+          <div className="min-h-screen bg-slate-950 text-slate-100">
+            <App />
+          </div>
         </BrowserRouter>
       </AuthProvider>
     </QueryClientProvider>

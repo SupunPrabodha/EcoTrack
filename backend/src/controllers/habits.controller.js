@@ -1,10 +1,11 @@
 import { asyncHandler } from "../utils/asyncHandler.js";
-import { createHabit, listHabits, updateHabit, deleteHabit } from "../services/habit.service.js";
+import { createHabit, listHabits, updateHabit, deleteHabit, getHabit } from "../services/habit.service.js";
+import { sendCreated, sendSuccess } from "../utils/response.js";
 
 export const createHabitCtrl = asyncHandler(async (req, res) => {
   const { type, value, date } = req.validated.body;
   const habit = await createHabit({ userId: req.user.userId, type, value, date: new Date(date) });
-  res.status(201).json({ success: true, data: habit });
+  sendCreated(res, { data: habit });
 });
 
 export const listHabitsCtrl = asyncHandler(async (req, res) => {
@@ -17,18 +18,24 @@ export const listHabitsCtrl = asyncHandler(async (req, res) => {
     to: new Date(to),
     type: type || null
   });
-  res.json({ success: true, data });
+  sendSuccess(res, { data, meta: { page: data.page, limit: data.limit, total: data.total, pages: data.pages } });
 });
 
 export const updateHabitCtrl = asyncHandler(async (req, res) => {
   const { id } = req.validated.params;
   const { value } = req.validated.body;
   const habit = await updateHabit({ userId: req.user.userId, id, value });
-  res.json({ success: true, data: habit });
+  sendSuccess(res, { data: habit });
+});
+
+export const getHabitCtrl = asyncHandler(async (req, res) => {
+  const { id } = req.validated.params;
+  const habit = await getHabit({ userId: req.user.userId, id });
+  sendSuccess(res, { data: habit });
 });
 
 export const deleteHabitCtrl = asyncHandler(async (req, res) => {
   const { id } = req.validated.params;
   await deleteHabit({ userId: req.user.userId, id });
-  res.json({ success: true, message: "Habit deleted" });
+  sendSuccess(res, { message: "Habit deleted" });
 });

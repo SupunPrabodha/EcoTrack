@@ -1,6 +1,72 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+@import "leaflet/dist/leaflet.css";
 
-:root { color-scheme: light; }
-body { @apply bg-slate-950 text-slate-100; }
+:root { 
+  color-scheme: dark;
+  --eco-gradient: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  --bg-pattern: radial-gradient(circle at 20% 50%, rgba(16, 185, 129, 0.05) 0%, transparent 50%),
+                radial-gradient(circle at 80% 80%, rgba(6, 182, 212, 0.05) 0%, transparent 50%);
+}
+
+html, body { height: 100%; }
+body { 
+  margin: 0;
+  background: #020617;
+  background-image: var(--bg-pattern);
+  background-attachment: fixed;
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-10px); }
+}
+
+@keyframes pulse-glow {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% center; }
+  100% { background-position: 200% center; }
+}
+
+.animate-float {
+  animation: float 6s ease-in-out infinite;
+}
+
+.animate-pulse-glow {
+  animation: pulse-glow 3s ease-in-out infinite;
+}
+
+.glass-card {
+  background: rgba(15, 23, 42, 0.6);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(16, 185, 129, 0.1);
+  box-shadow: 0 8px 32px 0 rgba(16, 185, 129, 0.08);
+}
+
+.glass-card:hover {
+  border-color: rgba(16, 185, 129, 0.2);
+  box-shadow: 0 12px 40px 0 rgba(16, 185, 129, 0.12);
+  transition: all 0.3s ease;
+}
+
+/* Leaflet map styles */
+.leaflet-container {
+  background: #1e293b;
+  font-family: inherit;
+}
+
+.leaflet-popup-content-wrapper {
+  background: rgba(15, 23, 42, 0.95);
+  backdrop-filter: blur(12px);
+  color: #e2e8f0;
+  border-radius: 12px;
+  box-shadow: 0 8px 32px 0 rgba(16, 185, 129, 0.2);
+}
+
+.leaflet-popup-tip {
+  background: rgba(15, 23, 42, 0.95);
+}
+

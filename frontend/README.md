@@ -1,16 +1,67 @@
-# React + Vite
+# EcoTrack (Frontend)
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+EcoTrack is a sustainability web app for habit tracking, emissions analytics, goals/accountability, and eco recommendations.
 
-Currently, two official plugins are available:
+## Requirements
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- Node.js `>=20`
+- pnpm `>=10`
 
-## React Compiler
+## Environment
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+Create a `.env` based on `.env.example`.
 
-## Expanding the ESLint configuration
+- `VITE_API_BASE_URL`
+	- Local dev (recommended): `/api` (Vite proxies to the backend)
+	- Same-host deployment: `/api`
+	- Separate hosting: `https://your-backend.example.com/api`
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+## Run locally
+
+1) Start the backend first (see `backend/.env.example`).
+
+2) Start the frontend:
+
+- `pnpm install`
+- `pnpm dev`
+
+App: `http://localhost:5173/`
+
+## Admin login (RBAC demo)
+
+The admin UI is at `http://localhost:5173/admin` and is only accessible to users with role `admin`.
+
+### 1) Create an account
+
+- Open `http://localhost:5173/login`
+- Register a new account (any email/password)
+
+### 2) Bootstrap the first admin (dev/demo only)
+
+In `backend/.env`, enable bootstrapping and set a token:
+
+- `ALLOW_BOOTSTRAP_ADMIN=true`
+- `BOOTSTRAP_ADMIN_TOKEN=...`
+
+Then call the bootstrap endpoint once (it only works if no admin exists yet):
+
+- `POST http://localhost:5000/api/admin/bootstrap`
+	- Body: `{ "email": "your_email", "token": "YOUR_BOOTSTRAP_ADMIN_TOKEN" }`
+
+### 3) Log in and open the admin page
+
+- Log in normally via the UI
+- The Navbar will show an **Admin** link for admins
+- Visit `http://localhost:5173/admin`
+
+## Production build
+
+- `pnpm build`
+- `pnpm preview`
+
+## Deployment notes (cookies + CORS)
+
+The frontend uses cookie-based auth (`withCredentials: true`). If your frontend and backend are on different domains:
+
+- Backend must set `CORS_ORIGINS` to include the frontend origin.
+- Backend must use HTTPS and set `COOKIE_SECURE=true` so cookies can be sent with `SameSite=None`.

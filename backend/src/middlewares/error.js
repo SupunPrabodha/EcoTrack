@@ -5,7 +5,7 @@ export function notFound(req, res, next) {
 }
 
 export function errorHandler(err, req, res, next) {
-  const status = err.statusCode || 500;
+  const status = err.statusCode || (err.message?.includes("CORS") ? 403 : 500);
   const payload = {
     success: false,
     message: err.message || "Internal server error",

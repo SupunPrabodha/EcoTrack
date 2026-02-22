@@ -1,9 +1,36 @@
 config:
   target: "http://localhost:5000"
+  processor: "./processor.cjs"
   phases:
-    - duration: 20
+    - duration: 30
+      arrivalRate: 5
+    - duration: 30
       arrivalRate: 10
+  defaults:
+    headers:
+      Content-Type: "application/json"
 scenarios:
-  - flow:
+  - name: "Auth + analytics + recommendations"
+    flow:
+      - function: "generateUser"
+      - post:
+          url: "/api/auth/register"
+          json:
+            name: "{{ name }}"
+            email: "{{ email }}"
+            password: "{{ password }}"
+      - post:
+          url: "/api/auth/login"
+          json:
+            email: "{{ email }}"
+            password: "{{ password }}"
       - get:
           url: "/api/health"
+      - get:
+          url: "/api/health/integrations"
+      - get:
+          url: "/api/emissions/summary"
+      - get:
+          url: "/api/emissions/trends"
+      - get:
+          url: "/api/recommendations/generate?from=2026-02-01T00:00:00.000Z&to=2026-02-15T23:59:59.999Z"

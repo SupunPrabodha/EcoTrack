@@ -1,34 +1,19 @@
 import request from "supertest";
-import { MongoMemoryServer } from "mongodb-memory-server";
-import mongoose from "mongoose";
-import { createApp } from "../src/app.js";
+import { registerAndLogin, setupTestApp, teardownTestApp } from "./testUtils.js";
 
 let app;
 let mongo;
 let cookie;
 
 beforeAll(async () => {
-  mongo = await MongoMemoryServer.create();
-  await mongoose.connect(mongo.getUri());
-  app = createApp();
-
-  await request(app).post("/api/auth/register").send({
-    name: "Test",
-    email: "t@t.com",
-    password: "Password123!"
-  }); 
-
-  const login = await request(app).post("/api/auth/login").send({
-    email: "t@t.com",
-    password: "Password123!"
-  });
-
-  cookie = login.headers["set-cookie"];
+  const setup = await setupTestApp();
+  mongo = setup.mongo;
+  app = setup.app;
+  cookie = await registerAndLogin(app);
 });
 
 afterAll(async () => {
-  await mongoose.connection.close();
-  await mongo.stop();
+  await teardownTestApp(mongo);
 });
 
 test("create habit", async () => {
