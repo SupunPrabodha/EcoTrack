@@ -59,16 +59,24 @@ export const updateEmissionCtrl = asyncHandler(async (req, res) => {
 	sendSuccess(res, { data: entry });
 });
 
-export const summaryCtrl = asyncHandler(async (req, res) => {
-  const { from, to } = req.validated.query;
-  const data = await getSummary(req.user.userId, new Date(from), new Date(to));
-  res.json({ success: true, data });
+export const emissionSummaryCtrl = asyncHandler(async (req, res) => {
+	const { from, to } = req.validated.query;
+	const data = await getEmissionSummary({
+		userId: req.user.userId,
+		from: from ? new Date(from) : null,
+		to: to ? new Date(to) : null,
+	});
+	sendSuccess(res, { data });
 });
 
-export const trendsCtrl = asyncHandler(async (req, res) => {
-  const { from, to } = req.validated.query;
-  const data = await getTrends(req.user.userId, new Date(from), new Date(to));
-  res.json({ success: true, data });
+export const emissionTrendsCtrl = asyncHandler(async (req, res) => {
+	const { from, to } = req.validated.query;
+	const data = await getEmissionTrends({
+		userId: req.user.userId,
+		from: from ? new Date(from) : null,
+		to: to ? new Date(to) : null,
+	});
+	sendSuccess(res, { data });
 });
 
 export const leaderboardCtrl = asyncHandler(async (req, res) => {

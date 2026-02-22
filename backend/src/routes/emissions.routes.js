@@ -8,23 +8,13 @@ import {
   deleteEmissionCtrl,
   getEmissionCtrl,
   updateEmissionCtrl,
-  leaderboardCtrl, 
-  summaryCtrl, 
-  trendsCtrl } from "../controllers/emissions.controller.js";
+  emissionSummaryCtrl,
+  emissionTrendsCtrl,
+} from "../controllers/emissions.controller.js";
 import { HABIT_TYPES } from "../utils/constants.js";
-
 
 const router = Router();
 router.use(requireAuth);
-
-const rangeSchema = z.object({
-  body: z.object({}).optional(),
-  params: z.object({}),
-  query: z.object({
-    from: z.string().datetime(),
-    to: z.string().datetime(),
-  })
-});
 
 const createSchema = z.object({
 	body: z
@@ -80,13 +70,30 @@ const updateSchema = z.object({
 	query: z.object({}),
 });
 
+const summarySchema = z.object({
+	body: z.object({}).optional(),
+	params: z.object({}),
+	query: z.object({
+		from: z.string().datetime().optional(),
+		to: z.string().datetime().optional(),
+	}),
+});
+
+const trendsSchema = z.object({
+	body: z.object({}).optional(),
+	params: z.object({}),
+	query: z.object({
+		from: z.string().datetime().optional(),
+		to: z.string().datetime().optional(),
+	}),
+});
+
 router.post("/", validate(createSchema), createEmissionCtrl);
 router.get("/", validate(listSchema), listEmissionsCtrl);
 router.get("/:id", validate(idSchema), getEmissionCtrl);
 router.delete("/:id", validate(idSchema), deleteEmissionCtrl);
 router.put("/:id", validate(updateSchema), updateEmissionCtrl);
-router.get("/summary", validate(rangeSchema), summaryCtrl);
-router.get("/trends", validate(rangeSchema), trendsCtrl);
-router.get("/leaderboard", validate(rangeSchema), leaderboardCtrl);
+router.get("/summary", validate(summarySchema), emissionSummaryCtrl);
+router.get("/trends", validate(trendsSchema), emissionTrendsCtrl);
 
 export default router;

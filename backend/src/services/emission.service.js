@@ -9,6 +9,11 @@ function round3(n) {
 	return Math.round(n * 1000) / 1000;
 }
 
+function toObjectIdIfPossible(id) {
+	if (mongoose.Types.ObjectId.isValid(id)) return new mongoose.Types.ObjectId(id);
+	return id;
+}
+
 export async function calculateEmission({ habitType, value, date, region }) {
 	if (typeof value !== "number" || value < 0) {
 		return { emissionKg: 0, method: "invalid_input" };
@@ -145,8 +150,65 @@ export async function updateEmissionEntry({ userId, id, patch }) {
 	return entry;
 }
 
+export async function getEmissionSummary({ userId, from, to }) {
+	const match = { userId: toObjectIdIfPossible(userId) };
+	if (from || to) {
+		match.date = {};
+		if (from) match.date.$gte = from;
+		if (to) match.date.$lte = to;
+	}
 
+	const [totals, byType] = await Promise.all([
+		EmissionEntry.aggregate([
+			{ $match: match },
+			{ $group: { _id: null, totalKg: { $sum: "$emissionKg" }, count: { $sum: 1 } } },
+		]),
+		EmissionEntry.aggregate([
+			{ $match: match },
+			{ $group: { _id: "$habitType", totalKg: { $sum: "$emissionKg" }, count: { $sum: 1 } } },
+			{ $sort: { totalKg: -1 } },
+		]),
+	]);
 
+	const gridIntensity = await getGridCarbonIntensity();
+
+	return {
+		totalKg: totals?.[0]?.totalKg || 0,
+		count: totals?.[0]?.count || 0,
+		byType,
+		gridIntensityGPerKwh: gridIntensity,
+	};
+}
+
+export async function getEmissionTrends({ userId, from, to }) {
+	const match = { userId: toObjectIdIfPossible(userId) };
+	if (from || to) {
+		match.date = {};
+		if (from) match.date.$gte = from;
+		if (to) match.date.$lte = to;
+	}
+
+	// Group by calendar day (UTC) for simple charting.
+	const rows = await EmissionEntry.aggregate([
+		{ $match: match },
+		{
+			$group: {
+				_id: {
+					$dateToString: {
+						format: "%Y-%m-%d",
+						date: "$date",
+						timezone: "UTC",
+					},
+				},
+				totalKg: { $sum: "$emissionKg" },
+				entries: { $sum: 1 },
+			},
+		},
+		{ $sort: { _id: 1 } },
+	]);
+
+	return rows;
+}
 
 
 
