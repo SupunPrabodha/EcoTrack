@@ -102,8 +102,14 @@ export async function getEmissionEntry({ userId, id }) {
 	return entry;
 }
 
-
-
+export async function deleteEmissionEntry({ userId, id }) {
+	const entry = await EmissionEntry.findOne({ _id: id, userId });
+	if (!entry) throw new ApiError(404, "Emission entry not found");
+	if (entry.sourceType === "habit") {
+		throw new ApiError(403, "Habit-derived entries are read-only; delete the habit instead");
+	}
+	await entry.deleteOne();
+}
 
 
 

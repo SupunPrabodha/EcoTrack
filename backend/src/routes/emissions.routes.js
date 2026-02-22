@@ -2,7 +2,14 @@ import { Router } from "express";
 import { z } from "zod";
 import { validate } from "../middlewares/validate.js";
 import { requireAuth } from "../middlewares/auth.js";
-import { createEmissionCtrl, listEmissionsCtrl, getEmissionCtrl, leaderboardCtrl, summaryCtrl, trendsCtrl } from "../controllers/emissions.controller.js";
+import { 
+  createEmissionCtrl, 
+  listEmissionsCtrl,
+  deleteEmissionCtrl,
+  getEmissionCtrl, 
+  leaderboardCtrl, 
+  summaryCtrl, 
+  trendsCtrl } from "../controllers/emissions.controller.js";
 import { HABIT_TYPES } from "../utils/constants.js";
 
 
@@ -60,6 +67,7 @@ const idSchema = z.object({
 router.post("/", validate(createSchema), createEmissionCtrl);
 router.get("/", validate(listSchema), listEmissionsCtrl);
 router.get("/:id", validate(idSchema), getEmissionCtrl);
+router.delete("/:id", validate(idSchema), deleteEmissionCtrl);
 router.get("/summary", validate(rangeSchema), summaryCtrl);
 router.get("/trends", validate(rangeSchema), trendsCtrl);
 router.get("/leaderboard", validate(rangeSchema), leaderboardCtrl);
