@@ -2,7 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { validate } from "../middlewares/validate.js";
 import { requireAuth } from "../middlewares/auth.js";
-import { createEmissionCtrl, leaderboardCtrl, summaryCtrl, trendsCtrl } from "../controllers/emissions.controller.js";
+import { createEmissionCtrl, listEmissionsCtrl, getEmissionCtrl, leaderboardCtrl, summaryCtrl, trendsCtrl } from "../controllers/emissions.controller.js";
 import { HABIT_TYPES } from "../utils/constants.js";
 
 
@@ -37,7 +37,29 @@ const createSchema = z.object({
 	query: z.object({}),
 });
 
+const listSchema = z.object({
+	body: z.object({}).optional(),
+	params: z.object({}),
+	query: z.object({
+		page: z.string().default("1"),
+		limit: z.string().default("10"),
+		from: z.string().datetime().optional(),
+		to: z.string().datetime().optional(),
+		sourceType: z.enum(["habit", "manual"]).optional(),
+		habitType: z.enum(HABIT_TYPES).optional(),
+		search: z.string().max(50).optional(),
+	}),
+});
+
+const idSchema = z.object({
+	body: z.object({}).optional(),
+	params: z.object({ id: z.string().min(10) }),
+	query: z.object({}),
+});
+
 router.post("/", validate(createSchema), createEmissionCtrl);
+router.get("/", validate(listSchema), listEmissionsCtrl);
+router.get("/:id", validate(idSchema), getEmissionCtrl);
 router.get("/summary", validate(rangeSchema), summaryCtrl);
 router.get("/trends", validate(rangeSchema), trendsCtrl);
 router.get("/leaderboard", validate(rangeSchema), leaderboardCtrl);

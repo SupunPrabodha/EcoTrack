@@ -26,6 +26,27 @@ export const createEmissionCtrl = asyncHandler(async (req, res) => {
 	sendCreated(res, { data: entry });
 });
 
+export const listEmissionsCtrl = asyncHandler(async (req, res) => {
+	const { page, limit, from, to, sourceType, habitType, search } = req.validated.query;
+	const data = await listEmissionEntries({
+		userId: req.user.userId,
+		page: Number(page),
+		limit: Number(limit),
+		from: from ? new Date(from) : null,
+		to: to ? new Date(to) : null,
+		sourceType: sourceType || null,
+		habitType: habitType || null,
+		search: search || null,
+	});
+	sendSuccess(res, { data, meta: { page: data.page, limit: data.limit, total: data.total, pages: data.pages } });
+});
+
+export const getEmissionCtrl = asyncHandler(async (req, res) => {
+	const { id } = req.validated.params;
+	const entry = await getEmissionEntry({ userId: req.user.userId, id });
+	sendSuccess(res, { data: entry });
+});
+
 export const summaryCtrl = asyncHandler(async (req, res) => {
   const { from, to } = req.validated.query;
   const data = await getSummary(req.user.userId, new Date(from), new Date(to));
