@@ -1,7 +1,11 @@
 export default function Card({ title, children }) {
   return (
-    <div className="rounded-2xl bg-slate-900/60 border border-slate-800 p-5 shadow-xl">
-      {title && <div className="text-sm text-slate-300 mb-3">{title}</div>}
+    <div className="glass-card rounded-2xl p-6 transition-all duration-300 hover:scale-[1.01]">
+      {title && (
+        <div className="text-sm font-medium text-emerald-400/80 mb-4 uppercase tracking-wider">
+          {title}
+        </div>
+      )}
       {children}
     </div>
   );

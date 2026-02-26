@@ -4,13 +4,18 @@
   "scripts": {
     "dev": "nodemon src/server.js",
     "start": "node src/server.js",
-    "test": "cross-env NODE_ENV=test jest --runInBand",
-    "test:watch": "cross-env NODE_ENV=test jest --watch"
+    "test": "cross-env NODE_ENV=test NODE_OPTIONS=--experimental-vm-modules MONGOMS_VERSION=6.0.6 MONGOMS_DOWNLOAD_DIR=.cache/mongodb-binaries MONGOMS_MD5_CHECK=false MONGOMS_RESUME_DOWNLOAD=false jest --runInBand",
+    "test:watch": "cross-env NODE_ENV=test NODE_OPTIONS=--experimental-vm-modules MONGOMS_VERSION=6.0.6 MONGOMS_DOWNLOAD_DIR=.cache/mongodb-binaries MONGOMS_MD5_CHECK=false MONGOMS_RESUME_DOWNLOAD=false jest --watch",
+    "perf": "artillery run artillery/load.yml"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "packageManager": "pnpm@10.29.3",
+  "engines": {
+    "node": ">=20",
+    "pnpm": ">=10"
+  },
   "dependencies": {
     "axios": "^1.13.5",
     "bcrypt": "^6.0.0",
@@ -28,6 +33,7 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "artillery": "^2.0.25",
     "cross-env": "^10.1.0",
     "jest": "^30.2.0",
     "mongodb-memory-server": "^11.0.1",
