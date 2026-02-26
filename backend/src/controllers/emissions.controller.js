@@ -8,7 +8,6 @@ import {
 	listEmissionEntries,
 	updateEmissionEntry,
 } from "../services/emission.service.js";
-
 import { sendCreated, sendSuccess } from "../utils/response.js";
 
 export const createEmissionCtrl = asyncHandler(async (req, res) => {
@@ -47,16 +46,16 @@ export const getEmissionCtrl = asyncHandler(async (req, res) => {
 	sendSuccess(res, { data: entry });
 });
 
-export const deleteEmissionCtrl = asyncHandler(async (req, res) => {
-	const { id } = req.validated.params;
-	await deleteEmissionEntry({ userId: req.user.userId, id });
-	sendSuccess(res, { message: "Emission entry deleted" });
-});
-
 export const updateEmissionCtrl = asyncHandler(async (req, res) => {
 	const { id } = req.validated.params;
 	const entry = await updateEmissionEntry({ userId: req.user.userId, id, patch: req.validated.body });
 	sendSuccess(res, { data: entry });
+});
+
+export const deleteEmissionCtrl = asyncHandler(async (req, res) => {
+	const { id } = req.validated.params;
+	await deleteEmissionEntry({ userId: req.user.userId, id });
+	sendSuccess(res, { message: "Emission entry deleted" });
 });
 
 export const emissionSummaryCtrl = asyncHandler(async (req, res) => {
@@ -77,10 +76,4 @@ export const emissionTrendsCtrl = asyncHandler(async (req, res) => {
 		to: to ? new Date(to) : null,
 	});
 	sendSuccess(res, { data });
-});
-
-export const leaderboardCtrl = asyncHandler(async (req, res) => {
-  const { from, to } = req.validated.query;
-  const data = await getLeaderboard(new Date(from), new Date(to), 10);
-  res.json({ success: true, data });
 });

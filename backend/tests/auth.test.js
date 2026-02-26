@@ -1,20 +1,17 @@
 import request from "supertest";
-import { MongoMemoryServer } from "mongodb-memory-server";
-import mongoose from "mongoose";
-import { createApp } from "../src/app.js";
+import { setupTestApp, teardownTestApp } from "./testUtils.js";
 
 let app;
 let mongo;
 
 beforeAll(async () => {
-  mongo = await MongoMemoryServer.create();
-  await mongoose.connect(mongo.getUri());
-  app = createApp();
+  const setup = await setupTestApp();
+  mongo = setup.mongo;
+  app = setup.app;
 });
 
 afterAll(async () => {
-  await mongoose.connection.close();
-  await mongo.stop();
+  await teardownTestApp(mongo);
 });
 
 test("register then login", async () => {

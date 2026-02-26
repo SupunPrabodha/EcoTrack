@@ -37,4 +37,9 @@ emissionEntrySchema.index(
   }
 );
 
+// Common query patterns: list + analytics over date ranges, segmented by source/type.
+emissionEntrySchema.index({ userId: 1, date: -1 });
+emissionEntrySchema.index({ userId: 1, sourceType: 1, date: -1 });
+emissionEntrySchema.index({ userId: 1, habitType: 1, date: -1 });
+
 export const EmissionEntry = mongoose.model("EmissionEntry", emissionEntrySchema);
