@@ -1,6 +1,6 @@
 import mongoose from "mongoose";
 import { EMISSION_FACTORS } from "../utils/constants.js";
-import { estimateCarbonInterfaceKg, getGridCarbonIntensity } from "./thirdparty.service.js";
+import { estimateClimatiqKg, getGridCarbonIntensity } from "./thirdparty.service.js";
 import { EmissionEntry } from "../models/EmissionEntry.js";
 import { ApiError } from "../utils/ApiError.js";
 import { normalizePagination, pagesFromTotal } from "../utils/pagination.js";
@@ -19,10 +19,10 @@ export async function calculateEmission({ habitType, value, date, region }) {
 		return { emissionKg: 0, method: "invalid_input" };
 	}
 
-	// 1) Carbon Interface (best-effort, only for supported types)
-	const ciKg = await estimateCarbonInterfaceKg({ habitType, value, date });
-	if (typeof ciKg === "number" && ciKg >= 0) {
-		return { emissionKg: round3(ciKg), method: "carbon_interface" };
+	// 1) Climatiq (best-effort, only for supported types)
+	const climatiqKg = await estimateClimatiqKg({ habitType, value, date });
+	if (typeof climatiqKg === "number" && climatiqKg >= 0) {
+		return { emissionKg: round3(climatiqKg), method: "climatiq" };
 	}
 
 	// 2) Carbon Intensity (meaningful for electricity)
@@ -40,8 +40,8 @@ export async function calculateEmission({ habitType, value, date, region }) {
 		return { emissionKg: round3(value * factor), method: "local_factor" };
 	}
 
-	return { emissionKg: 0, method: "unknown_type" };
-}
+		return { emissionKg: 0, method: "unknown_type" };
+	}
 
 // Backwards-compatible helper (existing code expects calculateEmissionKg(type, value))
 export async function calculateEmissionKg(habitType, value, date) {
@@ -60,6 +60,8 @@ export async function createEmissionEntry({ userId, sourceType, habitType, value
 	if (finalKg === undefined || finalKg === null) {
 		if (!habitType || typeof value !== "number") throw new ApiError(400, "habitType and value required when emissionKg is omitted");
 		const calc = await calculateEmission({ habitType, value, date: entryDate, region });
+		console.log("calculated using calculateEmission()");
+		
 		finalKg = calc.emissionKg;
 		method = calc.method;
 	}

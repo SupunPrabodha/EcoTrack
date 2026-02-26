@@ -7,7 +7,7 @@ import Navbar from "../components/Navbar";
 import Stat from "../components/Stat";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import {
-  IconBarChart,
+  IconChartBar,
   IconBolt,
   IconCalendar,
   IconEdit,
@@ -20,7 +20,7 @@ import {
   IconRefresh,
   IconTarget,
   IconWarning,
-  IconLineChart,
+  IconChartLine,
 } from "../components/Icons";
 
 function isoRange7Days() {
@@ -233,8 +233,8 @@ export default function Dashboard() {
                   <span>Weather: {integrationsQ.data?.openWeather?.enabled ? "enabled" : "disabled"}</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className={`w-2 h-2 rounded-full ${integrationsQ.data?.carbonInterface?.enabled ? "bg-emerald-400 animate-pulse" : "bg-slate-600"}`} />
-                  <span>Carbon Interface: {integrationsQ.data?.carbonInterface?.enabled ? "enabled" : "disabled"}</span>
+                  <span className={`w-2 h-2 rounded-full ${integrationsQ.data?.climatiq?.enabled ? "bg-emerald-400 animate-pulse" : "bg-slate-600"}`} />
+                  <span>Climatiq: {integrationsQ.data?.climatiq?.enabled ? "enabled" : "disabled"}</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <span className={`w-2 h-2 rounded-full ${integrationsQ.data?.email?.enabled ? "bg-emerald-400 animate-pulse" : "bg-slate-600"}`} />
@@ -250,7 +250,7 @@ export default function Dashboard() {
             <Card
               title={
                 <span className="inline-flex items-center gap-2">
-                  <IconLineChart width={16} height={16} />
+                  <IconChartLine width={16} height={16} />
                   <span>Trend (kg CO2e per day)</span>
                 </span>
               }
@@ -339,7 +339,7 @@ export default function Dashboard() {
               ) : (recentQ.data?.items || []).length === 0 ? (
                 <div className="text-sm text-slate-400 text-center py-8">
                   <div className="text-emerald-300 mb-2 grid place-items-center">
-                    <IconBarChart width={28} height={28} />
+                    <IconChartBar width={28} height={28} />
                   </div>
                   <div>No emissions logged yet.</div>
                 </div>

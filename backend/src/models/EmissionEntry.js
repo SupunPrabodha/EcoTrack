@@ -16,7 +16,7 @@ const emissionEntrySchema = new mongoose.Schema(
     emissionKg: { type: Number, required: true, min: 0 },
     calculationMethod: {
       type: String,
-      enum: ["carbon_interface", "grid_intensity", "local_factor", "invalid_input", "unknown_type"],
+      enum: ["carbon_interface", "climatiq", "grid_intensity", "local_factor", "invalid_input", "unknown_type"],
       default: "local_factor",
     },
 

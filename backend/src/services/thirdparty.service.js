@@ -29,8 +29,8 @@ function safeJsonError(err) {
 }
 
 const openWeather = httpClient("https://api.openweathermap.org");
-const carbonInterface = httpClient(env.CARBON_INTERFACE_BASE_URL);
 const carbonIntensity = httpClient(env.CARBON_INTENSITY_BASE_URL);
+const climatiq = httpClient(env.CLIMATIQ_BASE_URL);
 
 const IS_TEST = env.NODE_ENV === "test";
 
@@ -226,6 +226,8 @@ export async function getNearbyPlacesWeather(lat, lon, { cnt = 12 } = {}) {
 export async function getGridCarbonIntensity({ region } = {}) {
   if (IS_TEST) return 123;
 	const regionId = (region || env.CARBON_INTENSITY_REGION || "").trim();
+  console.log(regionId);
+  
 	const cacheKey = regionId || "__national__";
 	const now = Date.now();
 	const cached = cache.gridIntensity.get(cacheKey);
@@ -251,49 +253,55 @@ export async function getGridCarbonIntensity({ region } = {}) {
   }
 }
 
-// Carbon Interface estimates (best-effort): returns kgCO2e for supported habit types.
+
+// Climatiq estimates (best-effort): returns kgCO2e for supported habit types.
 // If the API key is missing or request fails, return null and let caller fallback.
-export async function estimateCarbonInterfaceKg({ habitType, value, date }) {
-  if (!env.CARBON_INTERFACE_API_KEY) return null;
+export async function estimateClimatiqKg({ habitType, value, date }) {
+  if (!env.CLIMATIQ_API_KEY) return null;
+
+  let payload = null;
+
+  if (habitType === "electricity_kwh") {
+    payload = {
+      emission_factor: {
+        activity_id: "electricity-supply_grid-source_residual_mix-supplier_cms_energy_consumers_energy",
+        data_version: "^0"
+      },
+      parameters: {
+        energy: value,
+        energy_unit: "kWh"
+      }
+    };
+  }
+
+  if (habitType === "car_km") {
+    payload = {
+      emission_factor: {
+        activity_id: "passenger_vehicle-vehicle_type_business_travel_car-fuel_source_na-engine_size_na-vehicle_age_na-vehicle_weight_na",
+        data_version: "^0"
+      },
+      parameters: {
+        distance: value,
+        distance_unit: "km"
+      }
+    };
+  }
+
+  // For types we don't support via Climatiq, caller falls back.
+  if (!payload) return null;
 
   try {
-    // Map EcoTrack habit types to Carbon Interface estimate payloads.
-    // Note: Carbon Interface has strict schemas; this is a pragmatic subset.
-    let payload = null;
-
-    if (habitType === "electricity_kwh") {
-      payload = {
-        type: "electricity",
-        electricity_unit: "kwh",
-        electricity_value: value,
-        country: env.CARBON_INTERFACE_ELECTRICITY_COUNTRY,
-      };
-    }
-
-    if (habitType === "car_km" && env.CARBON_INTERFACE_VEHICLE_MODEL_ID) {
-      payload = {
-        type: "vehicle",
-        distance_unit: "km",
-        distance_value: value,
-        vehicle_model_id: env.CARBON_INTERFACE_VEHICLE_MODEL_ID,
-      };
-    }
-
-    // For types we don't support via Carbon Interface, caller falls back.
-    if (!payload) return null;
-
-    const { data } = await carbonInterface.post(
-      "/estimates",
-      { ...payload, ...(date ? { measurement_time: date.toISOString?.() } : {}) },
+    const { data } = await climatiq.post(
+      "",
+      payload,
       {
         headers: {
-          Authorization: `Bearer ${env.CARBON_INTERFACE_API_KEY}`,
+          Authorization: `Bearer ${env.CLIMATIQ_API_KEY}`,
           "Content-Type": "application/json",
         },
       }
     );
-
-    const kg = data?.data?.attributes?.carbon_kg;
+    const kg = data?.co2e;
     return typeof kg === "number" ? kg : null;
   } catch {
     return null;
@@ -362,9 +370,9 @@ export async function sendGoalAlertEmail({ to, subject, text }) {
   return { sent: false, reason: "unsupported_email_provider" };
 }
 
-const openWeather = httpClient("https://api.openweathermap.org");
-const carbonInterface = httpClient(env.CARBON_INTERFACE_BASE_URL);
-const carbonIntensity = httpClient(env.CARBON_INTENSITY_BASE_URL);
+// const openWeather = httpClient("https://api.openweathermap.org");
+// const carbonInterface = httpClient(env.CARBON_INTERFACE_BASE_URL);
+// const carbonIntensity = httpClient(env.CARBON_INTENSITY_BASE_URL);
 
 // export async function getWeather(city = env.OPENWEATHER_CITY) {
 //   if (!env.OPENWEATHER_API_KEY) return null;
@@ -382,78 +390,78 @@ const carbonIntensity = httpClient(env.CARBON_INTENSITY_BASE_URL);
 // }
 
 // Carbon Intensity (default: UK National Grid). Returns gCO2/kWh.
-export async function getGridCarbonIntensity({ region } = {}) {
-	const regionId = (region || env.CARBON_INTENSITY_REGION || "").trim();
-	const cacheKey = regionId || "__national__";
-	const now = Date.now();
-	const cached = cache.gridIntensity.get(cacheKey);
-	if (cached?.expiresAt > now) return cached.value;
+// export async function getGridCarbonIntensity({ region } = {}) {
+// 	const regionId = (region || env.CARBON_INTENSITY_REGION || "").trim();
+// 	const cacheKey = regionId || "__national__";
+// 	const now = Date.now();
+// 	const cached = cache.gridIntensity.get(cacheKey);
+// 	if (cached?.expiresAt > now) return cached.value;
 
-  try {
-    if (regionId) {
-      const { data } = await carbonIntensity.get(`/regional/regionid/${encodeURIComponent(regionId)}`);
-      const intensity = data?.data?.[0]?.data?.[0]?.intensity?.forecast;
-		const val = typeof intensity === "number" ? intensity : null;
-		cache.gridIntensity.set(cacheKey, { value: val, expiresAt: now + (val === null ? TTL_NEGATIVE : TTL_15_MIN) });
-		return val;
-    }
+//   try {
+//     if (regionId) {
+//       const { data } = await carbonIntensity.get(`/regional/regionid/${encodeURIComponent(regionId)}`);
+//       const intensity = data?.data?.[0]?.data?.[0]?.intensity?.forecast;
+// 		const val = typeof intensity === "number" ? intensity : null;
+// 		cache.gridIntensity.set(cacheKey, { value: val, expiresAt: now + (val === null ? TTL_NEGATIVE : TTL_15_MIN) });
+// 		return val;
+//     }
 
-    const { data } = await carbonIntensity.get("/intensity");
-    const intensity = data?.data?.[0]?.intensity?.forecast;
-		const val = typeof intensity === "number" ? intensity : null;
-		cache.gridIntensity.set(cacheKey, { value: val, expiresAt: now + (val === null ? TTL_NEGATIVE : TTL_15_MIN) });
-		return val;
-  } catch {
-		cache.gridIntensity.set(cacheKey, { value: null, expiresAt: now + TTL_NEGATIVE });
-    return null;
-  }
-}
+//     const { data } = await carbonIntensity.get("/intensity");
+//     const intensity = data?.data?.[0]?.intensity?.forecast;
+// 		const val = typeof intensity === "number" ? intensity : null;
+// 		cache.gridIntensity.set(cacheKey, { value: val, expiresAt: now + (val === null ? TTL_NEGATIVE : TTL_15_MIN) });
+// 		return val;
+//   } catch {
+// 		cache.gridIntensity.set(cacheKey, { value: null, expiresAt: now + TTL_NEGATIVE });
+//     return null;
+//   }
+// }
 
 // Carbon Interface estimates (best-effort): returns kgCO2e for supported habit types.
 // If the API key is missing or request fails, return null and let caller fallback.
-export async function estimateCarbonInterfaceKg({ habitType, value, date }) {
-  if (!env.CARBON_INTERFACE_API_KEY) return null;
+// export async function estimateCarbonInterfaceKg({ habitType, value, date }) {
+//   if (!env.CARBON_INTERFACE_API_KEY) return null;
 
-  try {
-    // Map EcoTrack habit types to Carbon Interface estimate payloads.
-    // Note: Carbon Interface has strict schemas; this is a pragmatic subset.
-    let payload = null;
+//   try {
+//     // Map EcoTrack habit types to Carbon Interface estimate payloads.
+//     // Note: Carbon Interface has strict schemas; this is a pragmatic subset.
+//     let payload = null;
 
-    if (habitType === "electricity_kwh") {
-      payload = {
-        type: "electricity",
-        electricity_unit: "kwh",
-        electricity_value: value,
-        country: env.CARBON_INTERFACE_ELECTRICITY_COUNTRY,
-      };
-    }
+//     if (habitType === "electricity_kwh") {
+//       payload = {
+//         type: "electricity",
+//         electricity_unit: "kwh",
+//         electricity_value: value,
+//         country: env.CARBON_INTERFACE_ELECTRICITY_COUNTRY,
+//       };
+//     }
 
-    if (habitType === "car_km" && env.CARBON_INTERFACE_VEHICLE_MODEL_ID) {
-      payload = {
-        type: "vehicle",
-        distance_unit: "km",
-        distance_value: value,
-        vehicle_model_id: env.CARBON_INTERFACE_VEHICLE_MODEL_ID,
-      };
-    }
+//     if (habitType === "car_km" && env.CARBON_INTERFACE_VEHICLE_MODEL_ID) {
+//       payload = {
+//         type: "vehicle",
+//         distance_unit: "km",
+//         distance_value: value,
+//         vehicle_model_id: env.CARBON_INTERFACE_VEHICLE_MODEL_ID,
+//       };
+//     }
 
-    // For types we don't support via Carbon Interface, caller falls back.
-    if (!payload) return null;
+//     // For types we don't support via Carbon Interface, caller falls back.
+//     if (!payload) return null;
 
-    const { data } = await carbonInterface.post(
-      "/estimates",
-      { ...payload, ...(date ? { measurement_time: date.toISOString?.() } : {}) },
-      {
-        headers: {
-          Authorization: `Bearer ${env.CARBON_INTERFACE_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-      }
-    );
+//     const { data } = await carbonInterface.post(
+//       "/estimates",
+//       { ...payload, ...(date ? { measurement_time: date.toISOString?.() } : {}) },
+//       {
+//         headers: {
+//           Authorization: `Bearer ${env.CARBON_INTERFACE_API_KEY}`,
+//           "Content-Type": "application/json",
+//         },
+//       }
+//     );
 
-    const kg = data?.data?.attributes?.carbon_kg;
-    return typeof kg === "number" ? kg : null;
-  } catch {
-    return null;
-  }
-}
+//     const kg = data?.data?.attributes?.carbon_kg;
+//     return typeof kg === "number" ? kg : null;
+//   } catch {
+//     return null;
+//   }
+// }
