@@ -108,10 +108,9 @@ All third-party integrations are optional. If you leave keys empty, EcoTrack sti
 - OpenWeather (recommendations context)
   - `OPENWEATHER_API_KEY`
   - `OPENWEATHER_CITY`
-- Carbon Interface (best-effort emissions estimation)
-  - `CARBON_INTERFACE_API_KEY`
-  - `CARBON_INTERFACE_ELECTRICITY_COUNTRY`
-  - `CARBON_INTERFACE_VEHICLE_MODEL_ID` (only needed for certain estimates)
+- Climatiq (best-effort emissions estimation)
+  - `CLIMATIQ_API_KEY`
+  - `CLIMATIQ_BASE_URL`
 - Carbon Intensity (grid intensity fallback)
   - `CARBON_INTENSITY_BASE_URL`
   - `CARBON_INTENSITY_REGION`

@@ -12,7 +12,7 @@ router.get("/integrations", (req, res) => {
 	sendSuccess(res, {
 		data: {
 			openWeather: { enabled: Boolean(env.OPENWEATHER_API_KEY) },
-			carbonInterface: { enabled: Boolean(env.CARBON_INTERFACE_API_KEY) },
+			climatiq: { enabled: Boolean(env.CLIMATIQ_API_KEY) },
 			carbonIntensity: { enabled: Boolean(env.CARBON_INTENSITY_BASE_URL) },
 			email: {
 				provider: resolvedProvider || null,
