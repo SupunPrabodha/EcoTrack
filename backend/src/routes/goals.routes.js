@@ -3,12 +3,12 @@ import { z } from "zod";
 import { validate } from "../middlewares/validate.js";
 import { requireAuth } from "../middlewares/auth.js";
 import {
-	createGoalCtrl,
-	deleteGoalCtrl,
-	evaluateGoalCtrl,
-	getGoalCtrl,
-	listGoalsCtrl,
-	updateGoalCtrl,
+  createGoalCtrl,
+  deleteGoalCtrl,
+  evaluateGoalCtrl,
+  getGoalCtrl,
+  listGoalsCtrl,
+  updateGoalCtrl,
 } from "../controllers/goals.controller.js";
 
 /**
@@ -22,49 +22,53 @@ const router = Router();
 router.use(requireAuth);
 
 const createSchema = z.object({
-	body: z.object({
-		title: z.string().min(3).max(120),
-		maxKg: z.number().min(0),
-		startDate: z.string().datetime(),
-		endDate: z.string().datetime(),
-		alertsEnabled: z.boolean().optional(),
-		alertEmail: z.string().email().optional(),
-	}),
-	params: z.object({}),
-	query: z.object({}),
+  body: z.object({
+    title: z.string().min(3).max(120),
+    maxKg: z.number().min(0),
+    startDate: z.string().datetime(),
+    endDate: z.string().datetime(),
+    period: z.enum(["weekly", "monthly", "custom"]).optional(),
+    alertsEnabled: z.boolean().optional(),
+    alertEmail: z.string().email().optional(),
+  }),
+  params: z.object({}),
+  query: z.object({}),
 });
 
 const listSchema = z.object({
-	body: z.object({}).optional(),
-	params: z.object({}),
-	query: z.object({
-		page: z.string().default("1"),
-		limit: z.string().default("10"),
-		status: z.enum(["active", "achieved", "failed"]).optional(),
-		search: z.string().max(50).optional(),
-	}),
+  body: z.object({}).optional(),
+  params: z.object({}),
+  query: z.object({
+    page: z.string().default("1"),
+    limit: z.string().default("10"),
+    status: z.enum(["active", "achieved", "failed"]).optional(),
+    search: z.string().max(50).optional(),
+  }),
 });
 
 const idSchema = z.object({
-	body: z.object({}).optional(),
-	params: z.object({ id: z.string().min(10) }),
-	query: z.object({}),
+  body: z.object({}).optional(),
+  params: z.object({ id: z.string().min(10) }),
+  query: z.object({}),
 });
 
 const updateSchema = z.object({
-	body: z
-		.object({
-			title: z.string().min(3).max(120).optional(),
-			maxKg: z.number().min(0).optional(),
-			startDate: z.string().datetime().optional(),
-			endDate: z.string().datetime().optional(),
-			status: z.enum(["active", "achieved", "failed"]).optional(),
-			alertsEnabled: z.boolean().optional(),
-			alertEmail: z.string().email().optional(),
-		})
-		.refine((b) => Object.keys(b).length > 0, { message: "At least one field is required" }),
-	params: z.object({ id: z.string().min(10) }),
-	query: z.object({}),
+  body: z
+    .object({
+      title: z.string().min(3).max(120).optional(),
+      maxKg: z.number().min(0).optional(),
+      startDate: z.string().datetime().optional(),
+      endDate: z.string().datetime().optional(),
+      status: z.enum(["active", "achieved", "failed"]).optional(),
+      period: z.enum(["weekly", "monthly", "custom"]).optional(),
+      alertsEnabled: z.boolean().optional(),
+      alertEmail: z.string().email().optional(),
+    })
+    .refine((b) => Object.keys(b).length > 0, {
+      message: "At least one field is required",
+    }),
+  params: z.object({ id: z.string().min(10) }),
+  query: z.object({}),
 });
 
 router.post("/", validate(createSchema), createGoalCtrl);
@@ -94,6 +98,7 @@ router.post("/:id/evaluate", validate(idSchema), evaluateGoalCtrl);
  *                 maxKg: 50
  *                 startDate: "2026-02-01T00:00:00.000Z"
  *                 endDate: "2026-02-29T23:59:59.000Z"
+ *                 period: "monthly"
  *                 alertsEnabled: true
  *                 alertEmail: "me@example.com"
  *     responses:
