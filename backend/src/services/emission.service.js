@@ -15,16 +15,23 @@ function toObjectIdIfPossible(id) {
 }
 
 export async function calculateEmission({ habitType, value, date, region }) {
+	console.log("came inside calculateemission function");
+	
 	if (typeof value !== "number" || value < 0) {
 		return { emissionKg: 0, method: "invalid_input" };
 	}
 
 	// 1) Climatiq (best-effort, only for supported types)
 	const climatiqKg = await estimateClimatiqKg({ habitType, value, date });
+	console.log("came inside estimateClimatiqKg function climateiqkg="+climatiqKg);
+	
 	if (typeof climatiqKg === "number" && climatiqKg >= 0) {
+		console.log("came inside the climatiqkg if");
+		
 		return { emissionKg: round3(climatiqKg), method: "climatiq" };
 	}
-
+	console.log("im still ine the function");
+	
 	// 2) Carbon Intensity (meaningful for electricity)
 	if (habitType === "electricity_kwh") {
 		const intensity = await getGridCarbonIntensity({ region }); // gCO2/kWh

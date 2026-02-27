@@ -5,10 +5,12 @@ import { ApiError } from "../utils/ApiError.js";
 import { normalizePagination, pagesFromTotal } from "../utils/pagination.js";
 
 export async function createHabit({ userId, type, value, date }) {
+  console.log("came inside createhabit");
+  
   const { emissionKg, method } = await calculateEmission({ habitType: type, value, date });
 
   try {
-    const habit = await Habit.create({ userId, type, value, emissionKg, calculationMethod: method, date });
+    const habit = await Habit.create({ userId, type, value, emissionKg,  calculationMethod: method, date });
 
     // Keep emissions component consistent: 1 habit => 1 emission entry.
     await EmissionEntry.create({
