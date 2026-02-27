@@ -11,7 +11,7 @@ import { sendCreated, sendSuccess } from "../utils/response.js";
 
 //Create a new Goal
 export const createGoalCtrl = asyncHandler(async (req, res) => {
-  const { title, maxKg, startDate, endDate, alertsEnabled, alertEmail } =
+  const { title, maxKg, startDate, endDate, alertsEnabled, alertEmail, period } =
     req.validated.body;
   const goal = await createGoal({
     userId: req.user.userId,
@@ -19,6 +19,7 @@ export const createGoalCtrl = asyncHandler(async (req, res) => {
     maxKg,
     startDate: new Date(startDate),
     endDate: new Date(endDate),
+    period,
     alertsEnabled,
     alertEmail,
   });
