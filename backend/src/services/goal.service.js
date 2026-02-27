@@ -11,6 +11,7 @@ export async function createGoal({
   maxKg,
   startDate,
   endDate,
+  period,
   alertsEnabled,
   alertEmail,
 }) {
@@ -36,6 +37,7 @@ export async function createGoal({
     maxKg,
     startDate: start,
     endDate: end,
+    period,
     alertsEnabled: alertsEnabled ?? true,
     alertEmail: alertEmail || undefined,
   });
@@ -78,6 +80,7 @@ export async function updateGoal({ userId, id, patch }) {
   if (patch.title !== undefined) goal.title = patch.title;
   if (patch.maxKg !== undefined) goal.maxKg = patch.maxKg;
   if (patch.status !== undefined) goal.status = patch.status;
+  if (patch.period !== undefined) goal.period = patch.period;
   if (patch.alertsEnabled !== undefined)
     goal.alertsEnabled = patch.alertsEnabled;
   if (patch.alertEmail !== undefined)

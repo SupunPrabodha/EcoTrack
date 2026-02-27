@@ -27,6 +27,7 @@ const createSchema = z.object({
     maxKg: z.number().min(0),
     startDate: z.string().datetime(),
     endDate: z.string().datetime(),
+    period: z.enum(["weekly", "monthly", "custom"]).optional(),
     alertsEnabled: z.boolean().optional(),
     alertEmail: z.string().email().optional(),
   }),
@@ -59,6 +60,7 @@ const updateSchema = z.object({
       startDate: z.string().datetime().optional(),
       endDate: z.string().datetime().optional(),
       status: z.enum(["active", "achieved", "failed"]).optional(),
+      period: z.enum(["weekly", "monthly", "custom"]).optional(),
       alertsEnabled: z.boolean().optional(),
       alertEmail: z.string().email().optional(),
     })
@@ -96,6 +98,7 @@ router.post("/:id/evaluate", validate(idSchema), evaluateGoalCtrl);
  *                 maxKg: 50
  *                 startDate: "2026-02-01T00:00:00.000Z"
  *                 endDate: "2026-02-29T23:59:59.000Z"
+ *                 period: "monthly"
  *                 alertsEnabled: true
  *                 alertEmail: "me@example.com"
  *     responses:
