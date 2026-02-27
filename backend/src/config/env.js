@@ -50,6 +50,8 @@ export const env = {
   SENDGRID_FROM_EMAIL: process.env.SENDGRID_FROM_EMAIL || "",
   SENDGRID_SANDBOX_MODE: process.env.SENDGRID_SANDBOX_MODE === "true",
 
+  // Email provider configuration (no secrets baked into code).
+  // Set EMAIL_PROVIDER=brevo or sendgrid explicitly in your .env if you want to force one.
   EMAIL_PROVIDER: process.env.EMAIL_PROVIDER || "", // optional: sendgrid|brevo
   BREVO_API_KEY: process.env.BREVO_API_KEY || "",
   BREVO_SENDER_EMAIL: process.env.BREVO_SENDER_EMAIL || "",
