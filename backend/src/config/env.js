@@ -38,7 +38,7 @@ export const env = {
   OPENWEATHER_API_KEY: process.env.OPENWEATHER_API_KEY,
   OPENWEATHER_CITY: process.env.OPENWEATHER_CITY || "Colombo",
 
-  // Removed Carbon Interface variables
+  // climatiq api for carbon estimates
   CLIMATIQ_API_KEY: process.env.CLIMATIQ_API_KEY || "",
   CLIMATIQ_BASE_URL: process.env.CLIMATIQ_BASE_URL || "https://api.climatiq.io/data/v1/estimate",
 

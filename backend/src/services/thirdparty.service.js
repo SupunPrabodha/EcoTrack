@@ -260,6 +260,8 @@ export async function estimateClimatiqKg({ habitType, value, date }) {
   if (!env.CLIMATIQ_API_KEY) return null;
 
   let payload = null;
+  console.log("habit type " + habitType);
+  
 
   if (habitType === "electricity_kwh") {
     payload = {
@@ -275,6 +277,8 @@ export async function estimateClimatiqKg({ habitType, value, date }) {
   }
 
   if (habitType === "car_km") {
+    console.log("im inside car_km if");
+    
     payload = {
       emission_factor: {
         activity_id: "passenger_vehicle-vehicle_type_business_travel_car-fuel_source_na-engine_size_na-vehicle_age_na-vehicle_weight_na",
@@ -286,6 +290,9 @@ export async function estimateClimatiqKg({ habitType, value, date }) {
       }
     };
   }
+
+  console.log("paylood"+payload);
+  
 
   // For types we don't support via Climatiq, caller falls back.
   if (!payload) return null;
@@ -304,6 +311,8 @@ export async function estimateClimatiqKg({ habitType, value, date }) {
     const kg = data?.co2e;
     return typeof kg === "number" ? kg : null;
   } catch {
+    console.log("came into catch");
+    
     return null;
   }
 }

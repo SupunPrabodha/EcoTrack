@@ -1,6 +1,6 @@
 test("calculateEmission falls back to local factor without third-party keys", async () => {
   // Ensure no third-party keys in test env
-  process.env.CARBON_INTERFACE_API_KEY = "";
+  process.env.CLIMATIQ_API_KEY = "";
   process.env.OPENWEATHER_API_KEY = "";
   process.env.REQUEST_TIMEOUT_MS = "10";
 
@@ -8,5 +8,7 @@ test("calculateEmission falls back to local factor without third-party keys", as
 
   const res = await calculateEmission({ habitType: "car_km", value: 10, date: new Date() });
   expect(res.emissionKg).toBeGreaterThan(0);
-  expect(["local_factor", "carbon_interface"].includes(res.method)).toBe(true);
+  console.log("res. method= "+res.method);
+  
+  expect(["local_factor", "climatiq"].includes(res.method)).toBe(true);
 });
