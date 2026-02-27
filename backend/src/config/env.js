@@ -38,11 +38,9 @@ export const env = {
   OPENWEATHER_API_KEY: process.env.OPENWEATHER_API_KEY,
   OPENWEATHER_CITY: process.env.OPENWEATHER_CITY || "Colombo",
 
-  CARBON_INTERFACE_API_KEY: process.env.CARBON_INTERFACE_API_KEY || "",
-  CARBON_INTERFACE_BASE_URL:
-    process.env.CARBON_INTERFACE_BASE_URL || "https://www.carboninterface.com/api/v1",
-  CARBON_INTERFACE_ELECTRICITY_COUNTRY: process.env.CARBON_INTERFACE_ELECTRICITY_COUNTRY || "LK",
-  CARBON_INTERFACE_VEHICLE_MODEL_ID: process.env.CARBON_INTERFACE_VEHICLE_MODEL_ID || "",
+  // Removed Carbon Interface variables
+  CLIMATIQ_API_KEY: process.env.CLIMATIQ_API_KEY || "",
+  CLIMATIQ_BASE_URL: process.env.CLIMATIQ_BASE_URL || "https://api.climatiq.io/data/v1/estimate",
 
   CARBON_INTENSITY_BASE_URL:
     process.env.CARBON_INTENSITY_BASE_URL || "https://api.carbonintensity.org.uk",
