@@ -34,7 +34,7 @@ EcoTrack is a full-stack sustainability platform designed for coursework-grade, 
 These are optional but recommended to meet the rubric for “meaningful third-party integration”. If keys are missing, EcoTrack continues to work with safe fallbacks.
 
 - OpenWeather: recommendations context
-- Carbon Interface: emissions estimation (best-effort for supported habit types)
+- Climatiq API: emissions estimation (best-effort for supported habit types)
 - Carbon Intensity: electricity grid carbon intensity fallback
 - SendGrid: goal alert emails (sandbox supported)
 - Brevo (Sendinblue): goal alert emails (alternative to SendGrid)
