@@ -567,3 +567,6 @@ export function IconFlame(props) {
     </svg>
   );
 }
+
+// Aliases for dashboard imports
+export { IconChartBar as IconBarChart, IconChartLine as IconLineChart };
