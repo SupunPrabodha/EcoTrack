@@ -1,9 +1,11 @@
+import mongoose from "mongoose";
 import { Habit } from "../models/Habit.js";
 import { getWeather } from "./thirdparty.service.js";
 
 export async function buildRecommendations(userId, from, to) {
+  const userObjectId = typeof userId === "string" ? new mongoose.Types.ObjectId(userId) : userId;
   const stats = await Habit.aggregate([
-    { $match: { userId, date: { $gte: from, $lte: to } } },
+    { $match: { userId: userObjectId, date: { $gte: from, $lte: to } } },
     { $group: { _id: "$type", totalValue: { $sum: "$value" }, totalKg: { $sum: "$emissionKg" } } }
   ]);
 
@@ -52,5 +54,6 @@ export async function buildRecommendations(userId, from, to) {
     });
   }
 
-  return { weather, tips };
+  return { weather, tips, evidence: { habits: stats } };
 }
+
