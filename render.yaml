@@ -3,5 +3,5 @@ services:
     name: ecotrack-backend
     env: node
     rootDir: backend
-    buildCommand: corepack enable && pnpm install --frozen-lockfile
-    startCommand: pnpm start
+    buildCommand: corepack prepare pnpm@10.29.3 --activate && corepack pnpm install --frozen-lockfile
+    startCommand: corepack pnpm start
