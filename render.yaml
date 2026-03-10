@@ -1,0 +1,7 @@
+services:
+  - type: web
+    name: ecotrack-backend
+    env: node
+    rootDir: backend
+    buildCommand: corepack enable && pnpm install --frozen-lockfile
+    startCommand: pnpm start
