@@ -32,15 +32,47 @@ export function createApp() {
   app.use(cookieParser());
   app.use(apiLimiter);
 
+  function isOriginAllowed(origin) {
+    if (!origin) return true; // non-browser clients / same-origin
+    const allow = env.CORS_ORIGINS;
+    if (!allow?.length) return true;
+    if (allow.includes("*")) return true;
+    if (allow.includes(origin)) return true;
+
+    let parsed;
+    try {
+      parsed = new URL(origin);
+    } catch {
+      return false;
+    }
+
+    const { protocol, hostname } = parsed;
+
+    return allow.some((entry) => {
+      if (!entry) return false;
+
+      // Host suffix wildcard: "*.vercel.app"
+      if (entry.startsWith("*.")) {
+        const suffix = entry.slice(1); // ".vercel.app"
+        return hostname.endsWith(suffix);
+      }
+
+      // Protocol + host suffix wildcard: "https://*.vercel.app"
+      const m = entry.match(/^(https?:)\/\/\*\.(.+)$/i);
+      if (m) {
+        const expectedProtocol = m[1].toLowerCase();
+        const suffixHost = m[2].toLowerCase();
+        return protocol.toLowerCase() === expectedProtocol && hostname.toLowerCase().endsWith(`.${suffixHost}`);
+      }
+
+      return false;
+    });
+  }
+
   app.use(
     cors({
       origin(origin, cb) {
-        // Allow non-browser clients + same-origin
-        if (!origin) return cb(null, true);
-        if (!env.CORS_ORIGINS?.length) return cb(null, true);
-        return env.CORS_ORIGINS.includes(origin)
-          ? cb(null, true)
-          : cb(new Error("CORS origin not allowed"));
+        return cb(null, isOriginAllowed(origin));
       },
       credentials: true,
     })
