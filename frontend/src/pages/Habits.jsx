@@ -35,6 +35,9 @@ export default function Habits() {
   const [page, setPage] = useState(1);
   const limit = 10;
 
+  const [editingId, setEditingId] = useState(null);
+  const [editValue, setEditValue] = useState("");
+
   const range = useMemo(() => isoRangeFromDates(fromDate, toDate), [fromDate, toDate]);
 
   const listQ = useQuery({
@@ -47,6 +50,28 @@ export default function Habits() {
     mutationFn: async () => api.post("/habits", { type, value: Number(value), date: new Date().toISOString() }),
     onSuccess: () => {
       setPage(1);
+      qc.invalidateQueries({ queryKey: ["habits"] });
+      qc.invalidateQueries({ queryKey: ["summary"] });
+      qc.invalidateQueries({ queryKey: ["trends"] });
+      qc.invalidateQueries({ queryKey: ["recent-emissions"] });
+    }
+  });
+
+  const updateM = useMutation({
+    mutationFn: async ({ id, value }) => api.patch(`/habits/${id}`, { value: Number(value) }),
+    onSuccess: () => {
+      setEditingId(null);
+      setEditValue("");
+      qc.invalidateQueries({ queryKey: ["habits"] });
+      qc.invalidateQueries({ queryKey: ["summary"] });
+      qc.invalidateQueries({ queryKey: ["trends"] });
+      qc.invalidateQueries({ queryKey: ["recent-emissions"] });
+    }
+  });
+
+  const deleteM = useMutation({
+    mutationFn: async (id) => api.delete(`/habits/${id}`),
+    onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["habits"] });
       qc.invalidateQueries({ queryKey: ["summary"] });
       qc.invalidateQueries({ queryKey: ["trends"] });
@@ -191,15 +216,74 @@ export default function Habits() {
             <div className="space-y-2">
               {(listQ.data?.data?.items || []).map((h) => (
                 <div key={h._id} className="flex items-center justify-between gap-3 text-sm border-b border-slate-800 pb-2">
-                  <div className="min-w-0">
-                    <div className="text-slate-300 truncate">{h.type} — {h.value}</div>
-                    <div className="mt-1">
+                  <div className="min-w-0 flex-1">
+                    <div className="text-slate-300 truncate">
+                      {h.type} —{" "}
+                      {editingId === h._id ? (
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.1"
+                          className="ml-2 w-24 bg-slate-900/50 border border-emerald-500/20 rounded-lg px-2 py-1 focus:border-emerald-500/40 focus:ring-2 focus:ring-emerald-500/20 transition-all"
+                          value={editValue}
+                          onChange={(e) => setEditValue(e.target.value)}
+                        />
+                      ) : (
+                        h.value
+                      )}
+                    </div>
+                    <div className="mt-1 flex items-center gap-2">
                       <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] ${methodBadgeClass(h.calculationMethod)}`}>
                         {methodLabel(h.calculationMethod)}
                       </span>
                     </div>
                   </div>
-                  <div className="text-slate-400 whitespace-nowrap">{Number(h.emissionKg || 0).toFixed?.(2) ?? h.emissionKg} kg</div>
+
+                  <div className="flex items-center gap-3">
+                    <div className="text-slate-400 whitespace-nowrap">
+                      {Number(h.emissionKg || 0).toFixed?.(2) ?? h.emissionKg} kg
+                    </div>
+
+                    {editingId === h._id ? (
+                      <div className="flex gap-2">
+                        <button
+                          className="px-3 py-1.5 rounded-xl bg-emerald-600/80 hover:bg-emerald-600 text-sm disabled:opacity-50"
+                          disabled={updateM.isPending}
+                          onClick={() => updateM.mutate({ id: h._id, value: editValue })}
+                        >
+                          Save
+                        </button>
+                        <button
+                          className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-sm"
+                          onClick={() => {
+                            setEditingId(null);
+                            setEditValue("");
+                          }}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="flex gap-2">
+                        <button
+                          className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-sm"
+                          onClick={() => {
+                            setEditingId(h._id);
+                            setEditValue(String(h.value ?? ""));
+                          }}
+                        >
+                          Edit
+                        </button>
+                        <button
+                          className="px-3 py-1.5 rounded-xl bg-red-900/40 hover:bg-red-900/60 text-sm disabled:opacity-50"
+                          disabled={deleteM.isPending}
+                          onClick={() => deleteM.mutate(h._id)}
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>
