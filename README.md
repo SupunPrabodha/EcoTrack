@@ -1,231 +1,315 @@
 # EcoTrack
 
-EcoTrack is a full-stack sustainability platform designed for coursework-grade, production-style engineering:
+EcoTrack is a full-stack sustainability web application built for SE3040 (Application Frameworks) with a secure Express REST API and a React frontend.
 
-- Habit Tracking (CRUD)
-- Emissions Tracking + Analytics (CRUD + summary)
-- Goals & Accountability (CRUD + evaluation + optional email alerts)
-- Recommendations (generation + saved CRUD)
+Core components (minimum 4 as required):
+
+- Habits (CRUD + date-range filtering)
+- Emissions (CRUD + analytics)
+- Goals (CRUD + progress evaluation + optional email alerts)
+- Recommendations (generate + saved CRUD)
+
+Supporting components:
+
+- Auth (register/login/logout/me)
+- Admin (RBAC + analytics + user management)
+- Map (third-party/context endpoints)
+- Health checks
 
 ## Tech Stack
 
-- Backend: Node.js (ESM), Express, MongoDB/Mongoose, JWT (cookie + bearer), Zod validation, Swagger UI
-- Frontend: React (Vite), Axios, React Router
+- Backend: Node.js (ESM), Express, MongoDB/Mongoose, JWT (cookie + optional Bearer), Zod validation, Swagger UI
+- Frontend: React (Vite), React Router, Axios, Context API, Tailwind CSS
+- Testing: Jest + Supertest (backend), Vitest + React Testing Library (frontend)
+- Performance: Artillery
 
-## Functional Requirements (Implemented)
+## Architecture (Best Practice)
 
-- Auth: register/login/logout/me with JWT protection
-- Role-based access control: `admin` endpoints for user management
-- 4 core business components with RESTful APIs:
-  - Habits
-  - Emissions
-  - Goals
-  - Recommendations
+Layered architecture:
 
-## Non-Functional Requirements (Implemented)
+1) Routes (HTTP contracts + validation)
+2) Controllers (request/response handling)
+3) Services (business logic + third-party integrations)
+4) Models (MongoDB persistence)
+5) Middlewares (auth, RBAC, validation, errors, rate limiting)
 
-- Security: Helmet, rate limiting, cookie hardening, CORS allowlist
-- Reliability: centralized error handling, request validation, third-party timeouts + safe fallbacks
-- Documentation: Swagger `/api/docs` with examples
-- Testing: Jest + Supertest integration tests (backend)
+## Setup Instructions
 
-## Third-Party APIs (Configured in Service Layer)
+### Prerequisites
 
-These are optional but recommended to meet the rubric for “meaningful third-party integration”. If keys are missing, EcoTrack continues to work with safe fallbacks.
+- Node.js >= 20
+- pnpm >= 10
+- MongoDB connection string
 
-- OpenWeather: recommendations context
-- Climatiq API: emissions estimation (best-effort for supported habit types)
-- Carbon Intensity: electricity grid carbon intensity fallback
-- SendGrid: goal alert emails (sandbox supported)
-- Brevo (Sendinblue): goal alert emails (alternative to SendGrid)
+### Backend (Local)
 
-## Local Development
+1) Create `backend/.env` from `backend/.env.example`
+2) Install and run:
 
-### Backend
+```bash
+cd backend
+pnpm install
+pnpm dev
+```
 
-1) Create `backend/.env` based on `backend/.env.example`
+- API base: `http://localhost:5000/api`
+- Swagger UI: `http://localhost:5000/api/docs`
 
-Minimum required variables for backend:
+### Frontend (Local)
 
-- `MONGO_URI`
-- `JWT_SECRET`
+1) Create `frontend/.env` from `frontend/.env.example`
+2) Install and run:
 
-Recommended for local dev:
+```bash
+cd frontend
+pnpm install
+pnpm dev
+```
 
-- `COOKIE_SECURE=false`
-- `CORS_ORIGINS=http://localhost:5173,http://localhost:5174`
-- `TRUST_PROXY=false`
-2) Install + run:
+- App: `http://localhost:5173/`
 
-- `cd backend`
-- `pnpm install`
-- `pnpm dev`
+Note: In development, Vite proxies `/api` to the backend.
 
-Swagger UI: `http://localhost:5000/api/docs`
+## API Endpoint Documentation (Rubric)
 
-### Frontend
+Swagger UI is available at `/api/docs` and includes request examples.
 
-1) Create `frontend/.env` based on `frontend/.env.example`
-2) Install + run:
+Authentication:
 
-- `cd frontend`
-- `pnpm install`
-- `pnpm dev`
+- Browser sessions use an httpOnly cookie (frontend uses Axios `withCredentials: true`).
+- API clients may use `Authorization: Bearer <token>`.
 
-App: `http://localhost:5173/`
+Base URL (local): `http://localhost:5000/api`
 
-Vite is configured to proxy `/api` to the backend, so the frontend can use `VITE_API_BASE_URL=/api` in development.
+## Postman Guide (Optional)
 
-## JWT authentication (cookie + bearer)
+You can test the API using Postman (recommended for viva demos).
 
-EcoTrack supports:
+### 1) Create a Postman Environment
 
-- Browser auth via an httpOnly cookie (default, used by the frontend)
-- API clients via `Authorization: Bearer <token>`
+Create an environment variable:
 
-Backend variables relevant to JWT/cookies:
+- `baseUrl`
+  - Local: `http://localhost:5000/api`
+  - Deployed: `https://<your-render-app>.onrender.com/api`
 
-- `JWT_SECRET` (required)
-- `JWT_EXPIRES_IN` (e.g. `7d`, `12h`, `30m`)
-- `COOKIE_NAME` (default `accessToken`)
-- `COOKIE_SECURE`:
-  - `false` for local http
-  - `true` for https (required when `SameSite=None`)
-- `COOKIE_SAMESITE` (optional override; if empty it is derived from `COOKIE_SECURE`)
-- `COOKIE_DOMAIN` (optional; usually leave empty)
+### 2) Authentication flow (cookie-based)
 
-If frontend and backend are on different domains:
+EcoTrack’s frontend and Postman flow is cookie-based:
 
-- Use HTTPS
-- Set `COOKIE_SECURE=true`
-- Set backend `CORS_ORIGINS` to include the exact frontend origin
-- Set `TRUST_PROXY=true` when behind Render/NGINX
+1) `POST {{baseUrl}}/auth/register`
+   - Body (JSON):
+     ```json
+     { "name": "Alex", "email": "alex@example.com", "password": "Password123!" }
+     ```
+   - Expected:
+     - `201 Created`
 
-## Third-party API keys (optional)
+2) `POST {{baseUrl}}/auth/login`
+   - Body (JSON):
+     ```json
+     { "email": "alex@example.com", "password": "Password123!" }
+     ```
+   - Expected:
+     - `200 OK`
+     - Response sets an httpOnly cookie (Postman will store it for the domain)
 
-All third-party integrations are optional. If you leave keys empty, EcoTrack still works with safe fallbacks.
+3) `GET {{baseUrl}}/auth/me`
+   - Expected:
+     - `200 OK` with your current user
 
-- OpenWeather (recommendations context)
-  - `OPENWEATHER_API_KEY`
-  - `OPENWEATHER_CITY`
-- Climatiq (best-effort emissions estimation)
-  - `CLIMATIQ_API_KEY`
-  - `CLIMATIQ_BASE_URL`
+Notes:
+
+- No extra headers are required in Postman if the cookie is stored.
+- If testing against deployed frontend + backend on different domains, CORS/cookie settings must be correct (see Deployment section).
+
+### 3) Example CRUD calls (Protected)
+
+After login, try these:
+
+- Create a habit
+  - `POST {{baseUrl}}/habits`
+  - Body (JSON):
+    ```json
+    { "type": "car_km", "value": 12, "date": "2026-02-14T10:00:00.000Z" }
+    ```
+  - Expected: `201 Created`
+
+- List habits (pagination + date range)
+  - `GET {{baseUrl}}/habits?page=1&limit=10&from=2026-02-01T00:00:00.000Z&to=2026-02-28T23:59:59.999Z`
+  - Expected: `200 OK`
+
+- Generate recommendations
+  - `GET {{baseUrl}}/recommendations/generate?from=2026-02-01T00:00:00.000Z&to=2026-02-15T23:59:59.999Z`
+  - Expected: `200 OK` with a list of generated tips
+
+### 4) Admin-only endpoints
+
+Admin endpoints require a user with role `admin`.
+
+- Demo bootstrap (dev/demo only): `POST {{baseUrl}}/admin/bootstrap`
+- After admin exists, use:
+  - `GET {{baseUrl}}/admin/users`
+  - `PATCH {{baseUrl}}/admin/users/:id/role`
+
+### 5) Common errors you can explain in viva
+
+- `401 Unauthorized`: not logged in / cookie missing
+- `403 Forbidden`: logged in, but role not allowed (RBAC)
+- `400 Validation failed`: Zod validation blocked invalid data
+
+### Auth (`/auth`)
+
+- `POST /auth/register` (Public) — register user
+- `POST /auth/login` (Public) — login, sets auth cookie
+- `POST /auth/logout` (Public) — clears auth cookie
+- `GET /auth/me` (Protected) — current user identity
+
+### Habits (`/habits`) (Protected)
+
+- `POST /habits` — create habit
+- `GET /habits` — list habits (pagination + date range)
+- `GET /habits/:id` — get habit
+- `PUT|PATCH /habits/:id` — update habit
+- `DELETE /habits/:id` — delete habit
+
+### Emissions (`/emissions`) (Protected)
+
+- `POST /emissions` — create emission entry
+- `GET /emissions` — list emissions (pagination/filter/search)
+- `GET /emissions/:id` — get emission entry
+- `PUT|PATCH /emissions/:id` — update emission entry
+- `DELETE /emissions/:id` — delete emission entry
+- `GET /emissions/summary` — analytics summary
+- `GET /emissions/trends` — analytics trends
+
+### Goals (`/goals`) (Protected)
+
+- `POST /goals` — create goal
+- `GET /goals` — list goals (pagination/filter)
+- `GET /goals/:id` — get goal
+- `PUT|PATCH /goals/:id` — update goal
+- `DELETE /goals/:id` — delete goal
+- `GET /goals/:id/evaluate` — evaluate goal progress
+
+### Recommendations (`/recommendations`) (Protected)
+
+- `GET /recommendations/generate?from=...&to=...` — generate recommendations
+- `POST /recommendations` — save a recommendation
+- `GET /recommendations` — list saved recommendations (pagination + search + impact filter)
+- `GET /recommendations/:id` — get saved recommendation
+- `PUT /recommendations/:id` — update saved recommendation
+- `DELETE /recommendations/:id` — delete saved recommendation
+
+### Admin (`/admin`) (Mixed: bootstrap public, rest admin-only)
+
+- `POST /admin/bootstrap` (Public but server-gated) — bootstrap first admin (demo only)
+- `GET /admin/users` (Admin) — list users
+- `PATCH /admin/users/:id/role` (Admin) — change role
+- `GET /admin/analytics/emissions` (Admin) — global emissions analytics
+- `GET /admin/leaderboard/emissions` (Admin) — leaderboard
+- `GET /admin/analytics/goals` (Admin) — goal performance analytics
+
+### Health (`/health`) (Public)
+
+- `GET /health` — service health
+- `GET /health/integrations` — third-party integration status (best-effort)
+
+## Third-Party APIs (Additional Feature)
+
+All third-party integrations are optional. If keys are missing/invalid, the app continues to work with safe fallbacks.
+
+- OpenWeather (weather context for recommendations)
+- Climatiq (emission estimation)
 - Carbon Intensity (grid intensity fallback)
-  - `CARBON_INTENSITY_BASE_URL`
-  - `CARBON_INTENSITY_REGION`
-- SendGrid (goal alert emails)
-  - `SENDGRID_API_KEY`
-  - `SENDGRID_FROM_EMAIL`
-  - `SENDGRID_SANDBOX_MODE=true` (recommended for demos)
+- SendGrid or Brevo (goal alert emails)
 
-- Brevo / Sendinblue (goal alert emails - alternative)
-  - `BREVO_API_KEY`
-  - `BREVO_SENDER_EMAIL`
-  - `BREVO_SENDER_NAME`
-  - Optional: `EMAIL_PROVIDER=brevo` (or `sendgrid`)
+## Deployment Report (Rubric)
 
-Note: EmailJS is usually better suited for client-side contact forms. For server-side transactional alerts (like goal alerts), Brevo/SendGrid is more appropriate because the email API key stays on the server.
-
-## Hosting / Deployment (Host-Ready Notes)
-
-This section is intended to be used as the **Deployment Report** for the SE3040 submission.
-
-### Backend deployment (Render/Railway)
-
-1) Create a new service from the `backend/` folder
-2) Set build + start commands
-  - Build: `pnpm install`
-  - Start: `pnpm start`
-3) Add environment variables (do not expose secrets in the repo)
-  - Required: `NODE_ENV=production`, `MONGO_URI`, `JWT_SECRET`
-  - Cookie/CORS (when frontend is on a different domain):
-    - `TRUST_PROXY=true`
-    - `CORS_ORIGINS=https://<your-frontend-domain>`
-    - `COOKIE_SECURE=true`
-    - `COOKIE_SAMESITE=none`
-4) Verify
-  - `GET https://<backend>/api/health`
-  - Swagger: `https://<backend>/api/docs`
-
-### Backend
-
-- Set `NODE_ENV=production`
-- Set a strong `JWT_SECRET`
-- Set `TRUST_PROXY=true` when behind a reverse proxy (Render/NGINX)
-- If frontend and backend are on different domains:
-- If frontend and backend are on different domains:
-  - Set `CORS_ORIGINS` to the exact frontend origin
-  - Use HTTPS and set `COOKIE_SECURE=true`
-  - Set `COOKIE_SAMESITE=none`
-  - Set `TRUST_PROXY=true` (Render/NGINX)
-
-### Frontend
-
-- Set `VITE_API_BASE_URL`:
-
-### Frontend deployment (Vercel/Netlify)
-
-1) Create a new frontend project from the `frontend/` folder
-2) Set build command: `pnpm build`
-3) Set output dir: `dist`
-4) Add environment variables
-  - `VITE_API_BASE_URL=https://<your-backend-domain>/api`
-5) Verify
-  - Login/Register works
-  - Protected routes work (Dashboard, Habits, Emissions, Map)
-
-### Live URLs (fill for submission)
+### Live URLs (fill for final submission)
 
 - Backend API: `<paste deployed backend API URL>`
 - Swagger UI: `<paste deployed swagger URL>`
 - Frontend App: `<paste deployed frontend URL>`
 
-## Deployment Report (fill for final submission)
+### Backend Deployment (Render/Railway)
 
-### Live URLs
+1) Create a new service from the `backend/` directory
+2) Build command: `pnpm install`
+3) Start command: `pnpm start`
+4) Environment variables (do NOT commit secrets):
 
-- Backend API: `<paste deployed backend API URL>`
-- Swagger UI: `<paste deployed swagger URL>`
-- Frontend App: `<paste deployed frontend URL>`
+- Required:
+  - `NODE_ENV=production`
+  - `MONGO_URI=<masked>`
+  - `JWT_SECRET=<masked>`
+- If frontend is on a different domain (Vercel/Netlify):
+  - `TRUST_PROXY=true`
+  - `CORS_ORIGINS=https://<your-frontend-domain>`
+  - `COOKIE_SECURE=true`
+  - `COOKIE_SAMESITE=none`
 
-### Platforms used
+Verify:
 
-- Backend hosting: Render/Railway/Other: `<fill>`
-- Frontend hosting: Vercel/Netlify/Other: `<fill>`
+- `GET https://<backend>/api/health`
+- Swagger: `https://<backend>/api/docs`
 
-### Environment variables used (no secrets)
+### Frontend Deployment (Vercel/Netlify)
 
-- Backend: `NODE_ENV`, `MONGO_URI` (masked), `JWT_SECRET` (masked), `CORS_ORIGINS`, `TRUST_PROXY`, `COOKIE_*`, and optional third-party keys.
-- Frontend: `VITE_API_BASE_URL`
+1) Create a new project from the `frontend/` directory
+2) Build command: `pnpm build`
+3) Output directory: `dist`
+4) Environment variables:
 
-### Evidence
+- `VITE_API_BASE_URL=https://<your-backend-domain>/api`
 
-- Add screenshots of successful deployment (frontend home + swagger + a protected endpoint working).
+### Evidence (Screenshots)
 
-## Testing Instructions (for rubric)
+Include screenshots showing:
 
-### Backend
+- Swagger UI working (`/api/docs`)
+- Frontend home/login page
+- A protected feature working after login (e.g., Dashboard or Habits)
 
-- Install: `cd backend; pnpm install`
-- Run tests (unit + integration): `pnpm test`
+## Testing Instruction Report (Rubric)
 
-### Frontend (unit tests)
+### Backend (Unit + Integration)
 
-The frontend uses Vitest + React Testing Library.
+```bash
+cd backend
+pnpm install
+pnpm test
+```
 
-- Run: `cd frontend; pnpm test:run`
+Notes:
 
-### Performance testing (Artillery)
+- Tests use Jest + Supertest and cover routes/services.
 
-1) Start backend: `cd backend; pnpm dev`
-2) In another terminal: `cd backend; pnpm perf`
+### Frontend (Unit tests)
 
-The Artillery scenario registers + logs in a user, then hits analytics and recommendation endpoints to simulate realistic load.
+```bash
+cd frontend
+pnpm install
+pnpm test:run
+```
 
-Tip (Windows/PowerShell): if you see execution policy prompts, run `pnpm.cmd perf`.
+### Performance Testing (Artillery)
 
-## Repo Layout
+```bash
+cd backend
+pnpm dev
+```
 
-- `backend/` Express API + Swagger
-- `frontend/` React UI
+In another terminal:
+
+```bash
+cd backend
+pnpm perf
+```
+
+The Artillery scenario simulates: register → login → health → analytics → recommendation generation.
+
+## Repository Layout
+
+- `backend/` Express REST API, Swagger, tests, Artillery
+- `frontend/` React UI, tests
