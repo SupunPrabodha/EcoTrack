@@ -8,6 +8,7 @@ import {
   recommendationsGenerateCtrl,
   recommendationsGetCtrl,
   recommendationsListCtrl,
+  recommendationsReportCtrl,
   recommendationsSaveCtrl,
   recommendationsUpdateCtrl,
 } from "../controllers/recommendations.controller.js";
@@ -23,6 +24,15 @@ const router = Router();
 router.use(requireAuth);
 
 const generateSchema = z.object({
+  body: z.object({}).optional(),
+  params: z.object({}),
+  query: z.object({
+    from: z.string().datetime(),
+    to: z.string().datetime(),
+  }),
+});
+
+const reportSchema = z.object({
   body: z.object({}).optional(),
   params: z.object({}),
   query: z.object({
@@ -138,6 +148,7 @@ const feedbackSchema = z.object({
 });
 
 router.get("/generate", validate(generateSchema), recommendationsGenerateCtrl);
+router.get("/report", validate(reportSchema), recommendationsReportCtrl);
 
 router.post("/", validate(saveSchema), recommendationsSaveCtrl);
 router.get("/", validate(listSchema), recommendationsListCtrl);
@@ -167,6 +178,45 @@ router.delete("/:id", validate(idSchema), recommendationsDeleteCtrl);
  *     responses:
  *       200:
  *         description: OK
+ *       400:
+ *         description: Validation failed
+ */
+
+/**
+ * @openapi
+ * /recommendations/report:
+ *   get:
+ *     tags: [Recommendations]
+ *     summary: Download a PDF report of your saved recommendations for a date range
+ *     description: |
+ *       Returns a professional PDF report summarizing your saved recommendations and feedback in the selected range.
+ *
+ *       Report sections (high-level):
+ *       - Report context (date range + generated timestamp)
+ *       - Summary KPIs (counts and basic rates)
+ *       - Recent saved recommendations (sample list)
+ *
+ *       The response is sent as a downloadable attachment (`Content-Disposition: attachment`).
+ *     security:
+ *       - cookieAuth: []
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: from
+ *         required: true
+ *         example: "2026-02-01T00:00:00.000Z"
+ *       - in: query
+ *         name: to
+ *         required: true
+ *         example: "2026-02-28T23:59:59.000Z"
+ *     responses:
+ *       200:
+ *         description: PDF report
+ *         content:
+ *           application/pdf:
+ *             schema:
+ *               type: string
+ *               format: binary
  *       400:
  *         description: Validation failed
  */

@@ -38,8 +38,36 @@ export default function Recommendations() {
   const [page, setPage] = useState(1);
   const limit = 6;
   const [savedMsg, setSavedMsg] = useState(null);
+  const [reportMsg, setReportMsg] = useState(null);
+  const [reportBusy, setReportBusy] = useState(false);
   const [whyOpen, setWhyOpen] = useState(() => new Set());
   const [savedWhyOpen, setSavedWhyOpen] = useState(() => new Set());
+
+  function filenameFromContentDisposition(headerValue, fallback) {
+    if (!headerValue || typeof headerValue !== "string") return fallback;
+    const m = headerValue.match(/filename\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i);
+    const raw = m?.[1] || m?.[2];
+    if (!raw) return fallback;
+    try {
+      return decodeURIComponent(raw);
+    } catch {
+      return raw;
+    }
+  }
+
+  async function downloadBlobAsFile(blob, filename) {
+    const url = URL.createObjectURL(blob);
+    try {
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    } finally {
+      URL.revokeObjectURL(url);
+    }
+  }
 
   const recQ = useQuery({
     queryKey: ["recommendations", range],
@@ -153,6 +181,34 @@ export default function Recommendations() {
               </button>
             </div>
           </div>
+
+          <div className="mt-3 flex items-center justify-end">
+            <button
+              className="rounded-xl bg-gradient-to-r from-slate-800 to-slate-700 hover:from-slate-700 hover:to-slate-600 text-sm px-4 py-2 transition-all disabled:opacity-50"
+              disabled={reportBusy}
+              onClick={async () => {
+                setReportBusy(true);
+                try {
+                  const res = await api.get("/recommendations/report", { params: range, responseType: "blob" });
+                  const filename = filenameFromContentDisposition(
+                    res.headers?.["content-disposition"],
+                    `ecotrack-recommendations-report-${fromDate}-to-${toDate}.pdf`
+                  );
+                  await downloadBlobAsFile(res.data, filename);
+                  setReportMsg("Report downloaded.");
+                } catch {
+                  setReportMsg("Failed to download report.");
+                } finally {
+                  setReportBusy(false);
+                  setTimeout(() => setReportMsg(null), 2000);
+                }
+              }}
+              title="Download a PDF report of your saved recommendations"
+            >
+              {reportBusy ? "Preparing PDF…" : "Download PDF report"}
+            </button>
+          </div>
+
           <div className="mt-2 text-xs text-slate-500">
             Tips are based on your logged habits in this range, plus optional weather context.
           </div>
@@ -161,6 +217,12 @@ export default function Recommendations() {
         {savedMsg && (
           <div className="rounded-2xl border border-emerald-900 bg-emerald-950/30 text-emerald-200 px-4 py-3 text-sm">
             {savedMsg}
+          </div>
+        )}
+
+        {reportMsg && (
+          <div className="rounded-2xl border border-slate-800 bg-slate-900/30 text-slate-200 px-4 py-3 text-sm">
+            {reportMsg}
           </div>
         )}
 
