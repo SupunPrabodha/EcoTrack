@@ -224,6 +224,35 @@ function drawZebraRow(doc, { y, zebraOn }) {
   return y;
 }
 
+function clamp01(n) {
+  const x = Number(n);
+  if (!Number.isFinite(x)) return null;
+  if (x < 0) return 0;
+  if (x > 1) return 1;
+  return x;
+}
+
+function rateColor(rate) {
+  const r = clamp01(rate);
+  if (r === null) return BRAND.muted;
+  if (r >= 0.6) return BRAND.emerald;
+  if (r >= 0.3) return "#f59e0b"; // amber-500
+  return "#ef4444"; // red-500
+}
+
+function drawBadge(doc, { text, x, y, bg, fg = "#ffffff" }) {
+  const t = String(text ?? "—");
+  const padX = 6;
+  const h = 12;
+
+  doc.save();
+  doc.font("Helvetica-Bold").fontSize(8);
+  const w = Math.max(18, Math.min(80, doc.widthOfString(t) + padX * 2));
+  doc.roundedRect(x, y + 2, w, h, 6).fill(bg);
+  doc.fillColor(fg).text(t, x, y + 4, { width: w, align: "center" });
+  doc.restore();
+}
+
 export async function generateUserRecommendationsReportPdf({ userId, from, to }) {
   const fromD = ensureDate(from, "from");
   const toD = ensureDate(to, "to");
@@ -339,8 +368,14 @@ export async function generateUserRecommendationsReportPdf({ userId, from, to })
       drawZebraRow(doc, { y, zebraOn: zebra });
 
       doc.text(r.ruleId || "unknown", cols.rule, y, { width: 105, ellipsis: true });
-      doc.text(r.status || "saved", cols.status, y, { width: 65, ellipsis: true });
-      doc.text(r.rating || "—", cols.rating, y, { width: 70, ellipsis: true });
+
+      const status = r.status || "saved";
+      const rating = r.rating || "—";
+      const statusBg = status === "done" ? BRAND.emerald : status === "dismissed" ? "#334155" : BRAND.cyan;
+      const ratingBg = rating === "useful" ? BRAND.emerald : rating === "not_useful" ? "#ef4444" : "#64748b";
+      drawBadge(doc, { text: status, x: cols.status, y, bg: statusBg });
+      drawBadge(doc, { text: rating, x: cols.rating, y, bg: ratingBg });
+
       doc.text(String(safeNum(r?.evidence?.estimatedKgSaved ?? 0, 2)), cols.kg, y, { width: 65 });
       doc.text(fmtDate(r.createdAt), cols.date, y, { width: 160 });
       y += 16;
@@ -432,9 +467,25 @@ export async function generateAdminRecommendationsReportPdf({ from, to, limit = 
 
       doc.text(r.ruleId, cols.rule, y, { width: 135, ellipsis: true });
       doc.text(String(r.total ?? 0), cols.total, y, { width: 40 });
+
+      doc.save();
+      doc.fillColor(rateColor(r.usefulRate));
       doc.text(pct(r.usefulRate), cols.useful, y, { width: 60 });
+      doc.restore();
+
+      doc.save();
+      doc.fillColor(rateColor(r.doneRate));
       doc.text(pct(r.doneRate), cols.done, y, { width: 60 });
+      doc.restore();
+
+      doc.save();
+      // For dismiss%, higher is worse, so invert the color logic.
+      const d = clamp01(r.dismissRate);
+      const dismissColor = d === null ? BRAND.muted : d <= 0.2 ? BRAND.emerald : d <= 0.5 ? "#f59e0b" : "#ef4444";
+      doc.fillColor(dismissColor);
       doc.text(pct(r.dismissRate), cols.dismiss, y, { width: 70 });
+      doc.restore();
+
       doc.text(String(safeNum(r.avgEstimatedKgSaved ?? 0, 2)), cols.kg, y, { width: 70 });
       y += 16;
     }

@@ -126,13 +126,35 @@ export function drawKpiRow(doc, cards, { columns = 4 } = {}) {
 function drawFooter(doc, { page, totalPages } = {}) {
   const marginL = doc.page.margins.left;
   const marginR = doc.page.margins.right;
-  const y = doc.page.height - Math.max(doc.page.margins.bottom, 50) + 18;
+  // IMPORTANT: Keep footer inside the printable area.
+  // If we draw below (page.height - bottomMargin), PDFKit may create a new blank page.
+  const safeBottom = Math.max(doc.page.margins.bottom, 50);
+  const y = doc.page.height - safeBottom - 12;
   const usableW = doc.page.width - marginL - marginR;
 
   doc.save();
   doc.font("Helvetica").fontSize(8).fillColor(BRAND.muted);
   doc.text("EcoTrack", marginL, y, { width: usableW / 2, align: "left" });
   doc.text(`Page ${page}${totalPages ? ` of ${totalPages}` : ""}`, marginL, y, { width: usableW, align: "right" });
+  doc.restore();
+}
+
+function drawWatermark(doc, { text = "EcoTrack" } = {}) {
+  const pageW = doc.page.width;
+  const pageH = doc.page.height;
+
+  // Subtle diagonal watermark (premium feel, readability-safe)
+  doc.save();
+  doc.opacity(0.06);
+  doc.fillColor("#94a3b8");
+  doc.font("Helvetica-Bold");
+  doc.fontSize(72);
+
+  const cx = pageW / 2;
+  const cy = pageH / 2;
+  doc.rotate(-28, { origin: [cx, cy] });
+  doc.text(text, 0, cy - 40, { width: pageW, align: "center" });
+
   doc.restore();
 }
 
@@ -152,6 +174,9 @@ export async function renderPdf(build) {
     const totalPages = range.count;
     for (let i = range.start; i < range.start + range.count; i += 1) {
       doc.switchToPage(i);
+
+      // Watermark first, then footer (footer stays crisp on top).
+      drawWatermark(doc, { text: "EcoTrack" });
       drawFooter(doc, { page: i + 1, totalPages });
     }
 
