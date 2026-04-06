@@ -175,6 +175,95 @@ export async function getMonthlyReport({ userId, month }) {
   };
 }
 
+function levelBg(level) {
+  const x = String(level || "").toLowerCase();
+  if (x === "high") return "#ef4444";
+  if (x === "low") return BRAND.emerald;
+  return BRAND.cyan;
+}
+
+export async function generateMonthlyEmissionsReportPdf({ userId, month }) {
+  const report = await getMonthlyReport({ userId, month });
+  const user = await User.findById(userId).select("name email").lean();
+  if (!user) throw new ApiError(404, "User not found");
+
+  const totalKg = safeNum(report?.summary?.totalKg ?? 0, 2);
+  const entries = Number(report?.summary?.count ?? 0);
+  const deltaKg = safeNum(report?.comparison?.deltaKg ?? 0, 2);
+  const prevTotalKg = safeNum(report?.comparison?.previousTotalKg ?? 0, 2);
+  const deltaPct =
+    typeof report?.comparison?.deltaPct === "number" && Number.isFinite(report.comparison.deltaPct)
+      ? `${safeNum(report.comparison.deltaPct, 1)}%`
+      : "—";
+
+  const goalMaxKg = report?.goal?.maxKg != null ? safeNum(report.goal.maxKg, 2) : null;
+  const goalText = goalMaxKg != null ? `${goalMaxKg} kg` : "—";
+
+  const daily = Array.isArray(report?.trends) ? report.trends : [];
+
+  return renderPdf((doc) => {
+    drawBrandHeader(doc, {
+      title: "EcoTrack — Monthly Emissions Report",
+      subtitle: `Generated ${fmtDateTime(new Date())} • ${report.month} • ${fmtDate(report.range.from)} → ${fmtDate(report.range.to)}`,
+    });
+
+    // Keep the same *content* structure as the old Habits-page PDF,
+    // but render it using the shared pdf.js template (same style as recommendations PDF).
+    sectionTitle(doc, "Report context");
+    keyValue(doc, "User", `${user.name} <${user.email}>`);
+    keyValue(doc, "Month", report.month);
+    keyValue(doc, "Total emissions", `${totalKg} kg CO2e`);
+    keyValue(doc, "Generated", fmtDateTime(new Date()));
+
+    // Keep extra fields minimal (old PDF didn't show them), but retain goal at-a-glance.
+    if (report.goal?.title) {
+      keyValue(doc, "Monthly goal", `${goalText} (${report.goal.title})`);
+    }
+
+    const startX = doc.page.margins.left;
+    const y0 = doc.y;
+    doc.font("Helvetica").fontSize(10).fillColor(BRAND.muted).text("Level", startX, y0);
+    drawBadge(doc, { text: report.level, x: startX + 110, y: y0 - 2, bg: levelBg(report.level) });
+    doc.moveDown(0.8);
+
+    sectionTitle(doc, "Daily breakdown");
+    if (!daily.length) {
+      doc.font("Helvetica").fontSize(9).fillColor(BRAND.muted).text("No daily trend data for this month.");
+    } else {
+      let y = doc.y;
+      const cols = {
+        day: startX,
+        kg: startX + 160,
+        entries: startX + 260,
+      };
+      const headers = [
+        { key: "day", label: "Day (UTC)", width: 150 },
+        { key: "kg", label: "Total kg", width: 90 },
+        { key: "entries", label: "Entries", width: 90 },
+      ];
+      y = drawTableHeader(doc, { y, cols, headers });
+      doc.fillColor(BRAND.text).font("Helvetica").fontSize(9);
+
+      let zebra = false;
+      for (const row of daily.slice(0, 31)) {
+        if (y > 760) {
+          doc.addPage();
+          y = doc.y;
+          y = drawTableHeader(doc, { y, cols, headers });
+          zebra = false;
+        }
+
+        zebra = !zebra;
+        drawZebraRow(doc, { y, zebraOn: zebra });
+        doc.text(String(row?._id ?? "—"), cols.day, y, { width: 150 });
+        doc.text(String(safeNum(row?.totalKg ?? 0, 2)), cols.kg, y, { width: 90 });
+        doc.text(String(Number(row?.entries ?? 0)), cols.entries, y, { width: 90 });
+        y += 16;
+      }
+    }
+  });
+}
+
 function ensureDate(value, name) {
   const d = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(d.getTime())) throw new ApiError(400, `Invalid ${name}`);
