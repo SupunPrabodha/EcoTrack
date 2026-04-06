@@ -2,6 +2,8 @@
 
 EcoTrack is a sustainability web app for habit tracking, emissions analytics, goals/accountability, and eco recommendations.
 
+For the full SE3040 submission report (API docs + deployment + testing), see the repository root `README.md`.
+
 ## Requirements
 
 - Node.js `>=20`
@@ -59,9 +61,24 @@ Then call the bootstrap endpoint once (it only works if no admin exists yet):
 - `pnpm build`
 - `pnpm preview`
 
+## Deployment (Vercel/Netlify)
+
+1) Deploy from the `frontend/` directory
+2) Build command: `pnpm build`
+3) Output directory: `dist`
+4) Set environment variables:
+
+- `VITE_API_BASE_URL=https://<your-backend-domain>/api`
+
 ## Deployment notes (cookies + CORS)
 
 The frontend uses cookie-based auth (`withCredentials: true`). If your frontend and backend are on different domains:
 
 - Backend must set `CORS_ORIGINS` to include the frontend origin.
 - Backend must use HTTPS and set `COOKIE_SECURE=true` so cookies can be sent with `SameSite=None`.
+
+## Testing
+
+Unit tests use Vitest + React Testing Library:
+
+- `pnpm test:run`

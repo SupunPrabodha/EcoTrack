@@ -56,4 +56,8 @@ export const env = {
   BREVO_API_KEY: process.env.BREVO_API_KEY || "",
   BREVO_SENDER_EMAIL: process.env.BREVO_SENDER_EMAIL || "",
   BREVO_SENDER_NAME: process.env.BREVO_SENDER_NAME || "EcoTrack",
+
+  // Recommendations
+  // Prevents repeating the same ruleId too frequently for the same user.
+  RECOMMENDATION_RULE_COOLDOWN_DAYS: num("RECOMMENDATION_RULE_COOLDOWN_DAYS", 7),
 };

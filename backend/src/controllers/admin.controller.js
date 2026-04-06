@@ -3,11 +3,13 @@ import {
   getEmissionsLeaderboard,
   getGlobalEmissionsAnalytics,
   getGlobalGoalPerformance,
+  getGlobalRecommendationAnalytics,
   listUsers,
   setUserRole,
   bootstrapAdminByEmail,
 } from "../services/admin.service.js";
 import { sendSuccess } from "../utils/response.js";
+import { generateAdminRecommendationsReportPdf } from "../services/report.service.js";
 
 export const listUsersCtrl = asyncHandler(async (req, res) => {
   const { page, limit, search } = req.validated.query;
@@ -55,4 +57,27 @@ export const goalsPerformanceCtrl = asyncHandler(async (req, res) => {
     to: to ? new Date(to) : null,
   });
   sendSuccess(res, { data });
+});
+
+export const recommendationsAnalyticsCtrl = asyncHandler(async (req, res) => {
+  const { from, to, limit } = req.validated.query;
+  const data = await getGlobalRecommendationAnalytics({
+    from: from ? new Date(from) : null,
+    to: to ? new Date(to) : null,
+    limit: Number(limit),
+  });
+  sendSuccess(res, { data });
+});
+
+export const recommendationsReportCtrl = asyncHandler(async (req, res) => {
+  const { from, to, limit } = req.validated.query;
+  const pdf = await generateAdminRecommendationsReportPdf({
+    from: from ? new Date(from) : null,
+    to: to ? new Date(to) : null,
+    limit: Number(limit),
+  });
+
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Content-Disposition", `attachment; filename="ecotrack-admin-recommendations-report.pdf"`);
+  res.status(200).send(pdf);
 });
