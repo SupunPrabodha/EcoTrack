@@ -4,15 +4,112 @@ import { getWeather } from "./thirdparty.service.js";
 import { Recommendation } from "../models/Recommendation.js";
 import { ApiError } from "../utils/ApiError.js";
 import { normalizePagination, pagesFromTotal } from "../utils/pagination.js";
+import { Goal } from "../models/Goal.js";
+import { EmissionEntry } from "../models/EmissionEntry.js";
+import { env } from "../config/env.js";
+import { User } from "../models/User.js";
+
+function pushAudit(rec, action, meta) {
+  const entry = { at: new Date(), action, meta };
+  const existing = Array.isArray(rec.audit) ? rec.audit : [];
+  const next = [...existing, entry];
+  rec.audit = next.length > 30 ? next.slice(next.length - 30) : next;
+}
+
+function rangeDays(from, to) {
+  if (!(from instanceof Date) || !(to instanceof Date)) return 0;
+  const ms = Math.max(0, to.getTime() - from.getTime());
+  return Math.ceil(ms / (24 * 60 * 60 * 1000));
+}
+
+function buildDataUsed({ habitsEvidence, weather, goalEvidence, range }) {
+  const types = [];
+  if (habitsEvidence?.car_km?.totalValue) types.push("car_km");
+  if (habitsEvidence?.electricity_kwh?.totalValue) types.push("electricity_kwh");
+  if (habitsEvidence?.meat_meals?.totalValue) types.push("meat_meals");
+
+  const sources = [];
+  if (types.length) sources.push("habits");
+  if (weather) sources.push("weather");
+  if (goalEvidence) sources.push("goals");
+
+  return {
+    sources,
+    habitTypes: types,
+    rangeDays: range ? rangeDays(range.from, range.to) : 0,
+  };
+}
+
+function computeConfidence({ habitsEvidence, weather, goalEvidence }) {
+  const typesCount =
+    (habitsEvidence?.car_km?.totalValue ? 1 : 0) +
+    (habitsEvidence?.electricity_kwh?.totalValue ? 1 : 0) +
+    (habitsEvidence?.meat_meals?.totalValue ? 1 : 0);
+
+  const sourcesCount = typesCount + (weather ? 1 : 0) + (goalEvidence ? 1 : 0);
+
+  const habitVolume =
+    (habitsEvidence?.car_km?.totalValue || 0) +
+    (habitsEvidence?.electricity_kwh?.totalValue || 0) +
+    (habitsEvidence?.meat_meals?.totalValue || 0);
+
+  if (sourcesCount >= 3) return "high";
+  if (sourcesCount >= 2) return habitVolume >= 40 ? "high" : "medium";
+  if (sourcesCount === 1 && habitVolume >= 80) return "medium";
+  return "low";
+}
 
 function toObjectIdIfPossible(id) {
   if (mongoose.Types.ObjectId.isValid(id)) return new mongoose.Types.ObjectId(id);
   return id;
 }
 
-export async function buildRecommendations(userId, from, to) {
-  const stats = await Habit.aggregate([
+function round2(n) {
+  if (!Number.isFinite(n)) return 0;
+  return Math.round(n * 100) / 100;
+}
+
+function clampDateRange(from, to) {
+  const start = from instanceof Date ? from : new Date(from);
+  const end = to instanceof Date ? to : new Date(to);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+    throw new ApiError(400, "Invalid date range");
+  }
+  if (end < start) throw new ApiError(400, "Invalid date range: to must be after from");
+  return { from: start, to: end };
+}
+
+async function getActiveGoalForRange(userId, from, to) {
+  return Goal.findOne({
+    userId: toObjectIdIfPossible(userId),
+    status: "active",
+    $and: [{ startDate: { $lt: to } }, { endDate: { $gt: from } }],
+  }).sort({ startDate: -1 });
+}
+
+async function emissionsTotalForRange(userId, from, to) {
+  const totals = await EmissionEntry.aggregate([
     { $match: { userId: toObjectIdIfPossible(userId), date: { $gte: from, $lte: to } } },
+    { $group: { _id: null, totalKg: { $sum: "$emissionKg" } } },
+  ]);
+  return totals?.[0]?.totalKg || 0;
+}
+
+export async function buildRecommendations(userId, from, to) {
+  const range = clampDateRange(from, to);
+
+  const user = await User.findById(toObjectIdIfPossible(userId)).select("preferences").lean();
+  const prefs = user?.preferences || {};
+  const excludedRuleIds = new Set(
+    Array.isArray(prefs?.recommendations?.excludedRuleIds) ? prefs.recommendations.excludedRuleIds : []
+  );
+
+  // Derived personalization rules (optional): when set, filter out irrelevant tips.
+  if (prefs?.diet === "vegetarian" || prefs?.diet === "vegan") excludedRuleIds.add("meat_reduce");
+  if (["walk", "bike", "public", "remote"].includes(prefs?.transportMode)) excludedRuleIds.add("car_reduce");
+
+  const stats = await Habit.aggregate([
+    { $match: { userId: toObjectIdIfPossible(userId), date: { $gte: range.from, $lte: range.to } } },
     { $group: { _id: "$type", totalValue: { $sum: "$value" }, totalKg: { $sum: "$emissionKg" } } }
   ]);
 
@@ -28,78 +125,288 @@ export async function buildRecommendations(userId, from, to) {
 
   const weather = await getWeather();
 
+  const goal = await getActiveGoalForRange(userId, range.from, range.to);
+  let goalEvidence;
+  if (goal) {
+    const overlapFrom = goal.startDate > range.from ? goal.startDate : range.from;
+    const overlapTo = goal.endDate < range.to ? goal.endDate : range.to;
+    const currentKg = await emissionsTotalForRange(userId, overlapFrom, overlapTo);
+    goalEvidence = {
+      activeGoalId: goal._id,
+      goalTitle: goal.title,
+      currentKg: round2(currentKg),
+      maxKg: round2(goal.maxKg),
+      exceeded: currentKg > goal.maxKg,
+    };
+  }
+
   const evidence = {
     habits: habitsEvidence,
     weather: weather || undefined,
-    range: { from, to },
+    goals: goalEvidence || undefined,
+    dataUsed: buildDataUsed({ habitsEvidence, weather, goalEvidence, range }),
+    range: { from: range.from, to: range.to },
+  };
+
+  const confidence = computeConfidence({ habitsEvidence, weather, goalEvidence });
+
+  // Cooldown: avoid repeating the same ruleId too frequently for the same user.
+  const blockedRuleIds = new Set();
+  const cooldownDays = Math.max(0, Number(env.RECOMMENDATION_RULE_COOLDOWN_DAYS) || 0);
+  if (cooldownDays > 0) {
+    const now = new Date();
+    const cutoff = new Date(now.getTime() - cooldownDays * 24 * 60 * 60 * 1000);
+    const rows = await Recommendation.find({
+      userId: toObjectIdIfPossible(userId),
+      saved: true,
+      ruleId: { $exists: true, $ne: null, $ne: "" },
+      $or: [{ createdAt: { $gte: cutoff } }, { dismissedUntil: { $gt: now } }],
+    })
+      .select("ruleId")
+      .lean();
+
+    for (const r of rows) {
+      if (r?.ruleId) blockedRuleIds.add(r.ruleId);
+    }
+  }
+
+  const pushTip = (tip) => {
+    if (tip?.ruleId && blockedRuleIds.has(tip.ruleId)) return;
+    if (tip?.ruleId && excludedRuleIds.has(tip.ruleId)) return;
+    tips.push(tip);
   };
 
   if ((map.car_km?.totalValue || 0) > 60) {
     const carKm = map.car_km?.totalValue || 0;
-    tips.push({
+    const estKg = Math.max(0, (map.car_km?.totalKg || 0) * 0.1);
+    pushTip({
+      ruleId: "car_reduce",
       title: "Cut down car travel",
       body: "Your weekly car travel is high. Try public transport or carpooling for at least 2 trips this week.",
       impact: "High",
-      why: [`Car travel in range: ${Math.round(carKm)} km (threshold: 60 km)`],
+      estimatedKgSaved: round2(estKg),
+      confidence,
+      why: [
+        `Car travel in range: ${Math.round(carKm)} km (threshold: 60 km)`,
+        `Estimated savings if you reduce ~10%: ${round2(estKg)} kg CO2e`,
+      ],
     });
   }
 
   if ((map.electricity_kwh?.totalValue || 0) > 40) {
     const kwh = map.electricity_kwh?.totalValue || 0;
-    tips.push({
+    const estKg = Math.max(0, (map.electricity_kwh?.totalKg || 0) * 0.1);
+    pushTip({
+      ruleId: "electricity_reduce",
       title: "Reduce electricity usage",
       body: "Consider switching off standby devices and using LED bulbs to reduce kWh usage.",
       impact: "Medium",
-      why: [`Electricity usage in range: ${Math.round(kwh)} kWh (threshold: 40 kWh)`],
+      estimatedKgSaved: round2(estKg),
+      confidence,
+      why: [
+        `Electricity usage in range: ${Math.round(kwh)} kWh (threshold: 40 kWh)`,
+        `Estimated savings if you reduce ~10%: ${round2(estKg)} kg CO2e`,
+      ],
     });
   }
 
   if ((map.meat_meals?.totalValue || 0) > 6) {
     const meals = map.meat_meals?.totalValue || 0;
-    tips.push({
+    const perMealKg = meals > 0 ? (map.meat_meals?.totalKg || 0) / meals : 0;
+    const estKg = Math.max(0, perMealKg * 2); // suggest replacing ~2 meals
+    pushTip({
+      ruleId: "meat_reduce",
       title: "Try a plant-based day",
       body: "Replacing 1–2 meat meals per week can significantly reduce your footprint.",
       impact: "Medium",
-      why: [`Meat meals in range: ${Math.round(meals)} (threshold: 6)`],
+      estimatedKgSaved: round2(estKg),
+      confidence,
+      why: [
+        `Meat meals in range: ${Math.round(meals)} (threshold: 6)`,
+        `Estimated savings if you replace ~2 meals: ${round2(estKg)} kg CO2e`,
+      ],
     });
   }
 
+  if (goalEvidence) {
+    const pct = goalEvidence.maxKg > 0 ? goalEvidence.currentKg / goalEvidence.maxKg : 0;
+    if (goalEvidence.exceeded || pct >= 0.8) {
+      pushTip({
+        ruleId: "goal_progress",
+        title: goalEvidence.exceeded ? "Goal at risk: emissions exceeded" : "Stay on track with your goal",
+        body: goalEvidence.exceeded
+          ? `You have exceeded your goal target for "${goalEvidence.goalTitle}". Focus on the biggest contributors this week.`
+          : `You are close to your goal limit for "${goalEvidence.goalTitle}". Small changes this week can help you stay within the target.`,
+        impact: goalEvidence.exceeded ? "High" : "Medium",
+        estimatedKgSaved: 0,
+        confidence,
+        why: [
+          `Goal: ${goalEvidence.goalTitle}`,
+          `Current: ${goalEvidence.currentKg} kg CO2e (max: ${goalEvidence.maxKg} kg CO2e)`,
+        ],
+      });
+    }
+  }
+
   if (weather?.condition && ["Clear", "Clouds"].includes(weather.condition)) {
-    tips.push({
+    pushTip({
+      ruleId: "weather_walk",
       title: "Weather looks good for walking/cycling",
       body: `It's ${weather.tempC}°C in ${weather.city}. Consider walking or cycling for short trips today.`,
       impact: "Low",
+      confidence,
       why: [`Weather from OpenWeather: ${weather.condition} at ${weather.tempC}°C in ${weather.city}`],
     });
   }
 
   if (weather?.condition && ["Rain", "Thunderstorm"].includes(weather.condition)) {
-    tips.push({
+    pushTip({
+      ruleId: "weather_rain",
       title: "Rainy weather: plan low-carbon indoors",
       body: "If you skip walking today due to rain, try reducing electricity use indoors (shorter showers, switch off standby devices).",
       impact: "Low",
+      confidence,
       why: [`Weather from OpenWeather: ${weather.condition} at ${weather.tempC}°C in ${weather.city}`],
     });
   }
 
   if (tips.length === 0) {
-    tips.push({
+    pushTip({
+      ruleId: "balanced",
       title: "Great job!",
       body: "Your recent activity looks balanced. Keep logging habits to get smarter insights.",
       impact: "Positive",
+      confidence,
       why: ["No major high-impact signals detected in the selected date range."],
     });
   }
 
-  return { weather: weather || null, tips, evidence };
+  // Deduplicate by ruleId/title to avoid repeated suggestions
+  const seen = new Set();
+  const deduped = [];
+  for (const tip of tips) {
+    const key = tip.ruleId || tip.title;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    deduped.push(tip);
+  }
+
+  // Goal-driven prioritization: when a goal is active, show the most impactful contributor first.
+  // Uses habit emission totals as a proxy for "biggest contributor" in the selected range.
+  if (goalEvidence && deduped.length > 1) {
+    const contributorKg = {
+      car_reduce: habitsEvidence?.car_km?.totalKg || 0,
+      electricity_reduce: habitsEvidence?.electricity_kwh?.totalKg || 0,
+      meat_reduce: habitsEvidence?.meat_meals?.totalKg || 0,
+      goal_progress:
+        Math.max(
+          habitsEvidence?.car_km?.totalKg || 0,
+          habitsEvidence?.electricity_kwh?.totalKg || 0,
+          habitsEvidence?.meat_meals?.totalKg || 0
+        ) + 0.01,
+    };
+
+    const withRank = deduped.map((t, idx) => ({
+      t,
+      idx,
+      kg: contributorKg[t.ruleId] ?? 0,
+    }));
+
+    withRank.sort((a, b) => (b.kg - a.kg) || (a.idx - b.idx));
+    for (let i = 0; i < deduped.length; i += 1) deduped[i] = withRank[i].t;
+  }
+
+  return { weather: weather || null, tips: deduped, evidence, confidence };
 }
 
-export async function saveRecommendation({ userId, title, body, impact, context, evidence }) {
-  return Recommendation.create({ userId, title, body, impact, context, evidence, saved: true });
+export async function saveRecommendation({ userId, ruleId, title, body, impact, context, evidence }) {
+  const normalizedEvidence = evidence ? { ...evidence } : {};
+
+  // Ensure we always have a range context when client provided it (frontend does).
+  const from = normalizedEvidence?.range?.from ? new Date(normalizedEvidence.range.from) : undefined;
+  const to = normalizedEvidence?.range?.to ? new Date(normalizedEvidence.range.to) : undefined;
+  if ((!normalizedEvidence.range || !normalizedEvidence.range.from || !normalizedEvidence.range.to) && context?.range?.from && context?.range?.to) {
+    normalizedEvidence.range = { from: new Date(context.range.from), to: new Date(context.range.to) };
+  } else if (from instanceof Date && !Number.isNaN(from.getTime()) && to instanceof Date && !Number.isNaN(to.getTime())) {
+    normalizedEvidence.range = { from, to };
+  }
+
+  const goalEvidence = normalizedEvidence?.goals;
+  const habitsEvidence = normalizedEvidence?.habits;
+  const weather = normalizedEvidence?.weather || context?.weather;
+  const range = normalizedEvidence?.range?.from && normalizedEvidence?.range?.to ? { from: normalizedEvidence.range.from, to: normalizedEvidence.range.to } : null;
+
+  normalizedEvidence.dataUsed = buildDataUsed({ habitsEvidence, weather, goalEvidence, range });
+
+  // Ensure non-empty why
+  if (!Array.isArray(normalizedEvidence.why) || normalizedEvidence.why.length === 0) {
+    const parts = [];
+    if (normalizedEvidence.dataUsed?.habitTypes?.length) parts.push(`habits (${normalizedEvidence.dataUsed.habitTypes.join(", ")})`);
+    if (normalizedEvidence.dataUsed?.sources?.includes("weather")) parts.push("weather");
+    if (normalizedEvidence.dataUsed?.sources?.includes("goals")) parts.push("goal");
+    normalizedEvidence.why = [
+      parts.length ? `Based on your ${parts.join(" + ")} in the selected range.` : "Based on your activity in the selected range.",
+    ];
+  }
+
+  const confidence = computeConfidence({ habitsEvidence, weather, goalEvidence });
+
+  const rec = await Recommendation.create({ userId, ruleId, title, body, impact, context, evidence: normalizedEvidence, confidence, saved: true });
+  try {
+    pushAudit(rec, "saved", { ruleId: ruleId || undefined, impact: impact || undefined });
+    await rec.save();
+  } catch {
+    // best-effort audit trail
+  }
+  return rec;
+}
+
+export async function updateRecommendationFeedback({ userId, id, feedback }) {
+  const rec = await Recommendation.findOne({ _id: id, userId, saved: true });
+  if (!rec) throw new ApiError(404, "Recommendation not found");
+
+  const before = {
+    status: rec.status,
+    rating: rec.rating,
+    dismissedUntil: rec.dismissedUntil,
+  };
+
+  if (feedback.status !== undefined) {
+    rec.status = feedback.status;
+    if (feedback.status !== "dismissed") rec.dismissedUntil = undefined;
+  }
+
+  if (feedback.dismissDays !== undefined) {
+    const days = Number(feedback.dismissDays);
+    if (!Number.isFinite(days) || days < 1 || days > 365) throw new ApiError(400, "dismissDays must be between 1 and 365");
+    rec.status = "dismissed";
+    rec.dismissedUntil = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
+  }
+
+  if (feedback.rating !== undefined) rec.rating = feedback.rating;
+  if (feedback.feedbackNote !== undefined) rec.feedbackNote = feedback.feedbackNote || undefined;
+
+  const after = {
+    status: rec.status,
+    rating: rec.rating,
+    dismissedUntil: rec.dismissedUntil,
+  };
+  pushAudit(rec, "feedback", { before, after, dismissDays: feedback.dismissDays, note: feedback.feedbackNote ? true : undefined });
+
+  await rec.save();
+  return rec;
 }
 
 export async function listRecommendations({ userId, page, limit, search, impact }) {
-  const filter = { userId, saved: true };
+  const now = new Date();
+
+  // Auto-unhide expired dismissals so they re-enter the list cleanly.
+  await Recommendation.updateMany(
+    { userId: toObjectIdIfPossible(userId), saved: true, status: "dismissed", dismissedUntil: { $lte: now } },
+    { $set: { status: "saved" }, $unset: { dismissedUntil: 1 } }
+  );
+
+  const filter = { userId: toObjectIdIfPossible(userId), saved: true };
   if (impact) filter.impact = impact;
   if (search) {
     filter.$or = [
@@ -107,9 +414,52 @@ export async function listRecommendations({ userId, page, limit, search, impact 
       { body: { $regex: search, $options: "i" } },
     ];
   }
+
+
+  // Hide currently-dismissed items until their dismissedUntil passes.
+  filter.$and = [
+    {
+      $or: [
+        { status: { $ne: "dismissed" } },
+        { status: "dismissed", dismissedUntil: { $exists: false } },
+        { status: "dismissed", dismissedUntil: null },
+        { status: "dismissed", dismissedUntil: { $lte: now } },
+      ],
+    },
+  ];
+
 	const pg = normalizePagination({ page, limit, maxLimit: 100, defaultLimit: 10 });
   const [items, total] = await Promise.all([
-    Recommendation.find(filter).sort({ createdAt: -1 }).skip(pg.skip).limit(pg.limit),
+    Recommendation.aggregate([
+      { $match: filter },
+      {
+        $addFields: {
+          statusRank: {
+            $switch: {
+              branches: [
+                { case: { $eq: ["$status", "saved"] }, then: 0 },
+                { case: { $eq: ["$status", "done"] }, then: 1 },
+                { case: { $eq: ["$status", "dismissed"] }, then: 2 },
+              ],
+              default: 0,
+            },
+          },
+          ratingRank: {
+            $switch: {
+              branches: [
+                { case: { $eq: ["$rating", "useful"] }, then: 0 },
+                { case: { $eq: ["$rating", "not_useful"] }, then: 2 },
+              ],
+              default: 1,
+            },
+          },
+        },
+      },
+      { $sort: { statusRank: 1, ratingRank: 1, createdAt: -1 } },
+      { $skip: pg.skip },
+      { $limit: pg.limit },
+      { $project: { statusRank: 0, ratingRank: 0 } },
+    ]),
     Recommendation.countDocuments(filter),
   ]);
 

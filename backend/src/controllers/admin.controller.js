@@ -3,6 +3,7 @@ import {
   getEmissionsLeaderboard,
   getGlobalEmissionsAnalytics,
   getGlobalGoalPerformance,
+  getGlobalRecommendationAnalytics,
   listUsers,
   setUserRole,
   bootstrapAdminByEmail,
@@ -53,6 +54,16 @@ export const goalsPerformanceCtrl = asyncHandler(async (req, res) => {
   const data = await getGlobalGoalPerformance({
     from: from ? new Date(from) : null,
     to: to ? new Date(to) : null,
+  });
+  sendSuccess(res, { data });
+});
+
+export const recommendationsAnalyticsCtrl = asyncHandler(async (req, res) => {
+  const { from, to, limit } = req.validated.query;
+  const data = await getGlobalRecommendationAnalytics({
+    from: from ? new Date(from) : null,
+    to: to ? new Date(to) : null,
+    limit: Number(limit),
   });
   sendSuccess(res, { data });
 });

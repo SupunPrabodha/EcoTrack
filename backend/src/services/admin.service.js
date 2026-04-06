@@ -3,6 +3,7 @@ import { ApiError } from "../utils/ApiError.js";
 import { normalizePagination, pagesFromTotal } from "../utils/pagination.js";
 import { EmissionEntry } from "../models/EmissionEntry.js";
 import { Goal } from "../models/Goal.js";
+import { Recommendation } from "../models/Recommendation.js";
 
 export async function listUsers({ page, limit, search }) {
   const filter = {};
@@ -147,5 +148,114 @@ export async function getGlobalGoalPerformance({ from, to }) {
       enabled: alertsEnabled.true || 0,
       disabled: alertsEnabled.false || 0,
     },
+  };
+}
+
+export async function getGlobalRecommendationAnalytics({ from, to, limit = 20 }) {
+  const match = { saved: true };
+  if (from || to) {
+    match.createdAt = {};
+    if (from) match.createdAt.$gte = from;
+    if (to) match.createdAt.$lte = to;
+  }
+
+  const safeLimit = Math.min(Math.max(Number(limit) || 20, 1), 100);
+
+  const [summaryRows, byRuleRows] = await Promise.all([
+    Recommendation.aggregate([
+      { $match: match },
+      {
+        $group: {
+          _id: null,
+          total: { $sum: 1 },
+          users: { $addToSet: "$userId" },
+          done: { $sum: { $cond: [{ $eq: ["$status", "done"] }, 1, 0] } },
+          dismissed: { $sum: { $cond: [{ $eq: ["$status", "dismissed"] }, 1, 0] } },
+          saved: { $sum: { $cond: [{ $eq: ["$status", "saved"] }, 1, 0] } },
+          useful: { $sum: { $cond: [{ $eq: ["$rating", "useful"] }, 1, 0] } },
+          notUseful: { $sum: { $cond: [{ $eq: ["$rating", "not_useful"] }, 1, 0] } },
+          avgEstimatedKgSaved: { $avg: { $ifNull: ["$evidence.estimatedKgSaved", 0] } },
+        },
+      },
+      {
+        $project: {
+          _id: 0,
+          total: 1,
+          users: { $size: "$users" },
+          done: 1,
+          dismissed: 1,
+          saved: 1,
+          useful: 1,
+          notUseful: 1,
+          avgEstimatedKgSaved: 1,
+        },
+      },
+    ]),
+
+    Recommendation.aggregate([
+      { $match: match },
+      {
+        $group: {
+          _id: { $ifNull: ["$ruleId", "unknown"] },
+          total: { $sum: 1 },
+          users: { $addToSet: "$userId" },
+          done: { $sum: { $cond: [{ $eq: ["$status", "done"] }, 1, 0] } },
+          dismissed: { $sum: { $cond: [{ $eq: ["$status", "dismissed"] }, 1, 0] } },
+          saved: { $sum: { $cond: [{ $eq: ["$status", "saved"] }, 1, 0] } },
+          useful: { $sum: { $cond: [{ $eq: ["$rating", "useful"] }, 1, 0] } },
+          notUseful: { $sum: { $cond: [{ $eq: ["$rating", "not_useful"] }, 1, 0] } },
+          avgEstimatedKgSaved: { $avg: { $ifNull: ["$evidence.estimatedKgSaved", 0] } },
+          lastCreatedAt: { $max: "$createdAt" },
+        },
+      },
+      {
+        $project: {
+          _id: 0,
+          ruleId: "$_id",
+          total: 1,
+          users: { $size: "$users" },
+          done: 1,
+          dismissed: 1,
+          saved: 1,
+          useful: 1,
+          notUseful: 1,
+          avgEstimatedKgSaved: 1,
+          lastCreatedAt: 1,
+        },
+      },
+      { $sort: { total: -1, done: -1, useful: -1, lastCreatedAt: -1 } },
+      { $limit: safeLimit },
+    ]),
+  ]);
+
+  const summary = summaryRows?.[0] || {
+    total: 0,
+    users: 0,
+    done: 0,
+    dismissed: 0,
+    saved: 0,
+    useful: 0,
+    notUseful: 0,
+    avgEstimatedKgSaved: 0,
+  };
+
+  const byRule = (byRuleRows || []).map((r) => {
+    const feedbackCount = (r.useful || 0) + (r.notUseful || 0);
+    const usefulRate = feedbackCount > 0 ? (r.useful || 0) / feedbackCount : null;
+    const doneRate = (r.total || 0) > 0 ? (r.done || 0) / r.total : null;
+    const dismissRate = (r.total || 0) > 0 ? (r.dismissed || 0) / r.total : null;
+    return {
+      ...r,
+      usefulRate,
+      doneRate,
+      dismissRate,
+    };
+  });
+
+  return {
+    range: { from: from || null, to: to || null },
+    limit: safeLimit,
+    summary,
+    byRule,
   };
 }

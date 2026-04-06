@@ -38,7 +38,7 @@ export const env = {
   OPENWEATHER_API_KEY: process.env.OPENWEATHER_API_KEY,
   OPENWEATHER_CITY: process.env.OPENWEATHER_CITY || "Colombo",
 
-  // Removed Carbon Interface variables
+  // climatiq api for carbon estimates
   CLIMATIQ_API_KEY: process.env.CLIMATIQ_API_KEY || "",
   CLIMATIQ_BASE_URL: process.env.CLIMATIQ_BASE_URL || "https://api.climatiq.io/data/v1/estimate",
 
@@ -56,4 +56,8 @@ export const env = {
   BREVO_API_KEY: process.env.BREVO_API_KEY || "",
   BREVO_SENDER_EMAIL: process.env.BREVO_SENDER_EMAIL || "",
   BREVO_SENDER_NAME: process.env.BREVO_SENDER_NAME || "EcoTrack",
+
+  // Recommendations
+  // Prevents repeating the same ruleId too frequently for the same user.
+  RECOMMENDATION_RULE_COOLDOWN_DAYS: num("RECOMMENDATION_RULE_COOLDOWN_DAYS", 7),
 };

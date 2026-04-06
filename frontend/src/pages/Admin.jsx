@@ -74,6 +74,12 @@ export default function Admin() {
     queryFn: async () => (await api.get("/admin/users", { params: usersParams })).data.data,
   });
 
+  const recsQ = useQuery({
+    queryKey: ["admin-recommendations-analytics", params],
+    queryFn: async () =>
+      (await api.get("/admin/analytics/recommendations", { params: { ...params, limit: 20 } })).data.data,
+  });
+
   const setRoleM = useMutation({
     mutationFn: async ({ id, role }) => (await api.patch(`/admin/users/${id}/role`, { role })).data.data,
     onSuccess: () => {
@@ -81,7 +87,12 @@ export default function Admin() {
     },
   });
 
-  const error = emissionsQ.isError || goalsQ.isError || leaderboardQ.isError || usersQ.isError;
+  const error = emissionsQ.isError || goalsQ.isError || leaderboardQ.isError || usersQ.isError || recsQ.isError;
+
+  const pct = (x) => {
+    if (typeof x !== "number" || !Number.isFinite(x)) return "—";
+    return `${Math.round(x * 100)}%`;
+  };
 
   return (
     <div className="min-h-screen">
@@ -254,6 +265,70 @@ export default function Admin() {
                   ))}
                 </tbody>
               </table>
+            </div>
+          )}
+        </Card>
+
+        <Card title="Recommendation effectiveness (by ruleId)">
+          {recsQ.isLoading ? (
+            <div className="text-sm text-slate-400">Loading…</div>
+          ) : (recsQ.data?.byRule || []).length === 0 ? (
+            <div className="text-sm text-slate-400">No saved recommendations in this range yet.</div>
+          ) : (
+            <div className="space-y-4">
+              <div className="grid md:grid-cols-4 gap-4">
+                <div className="rounded-2xl border border-emerald-500/15 bg-slate-900/30 p-4">
+                  <div className="text-xs text-slate-400">Saved recommendations</div>
+                  <div className="text-2xl font-semibold text-slate-100">{recsQ.data?.summary?.total ?? 0}</div>
+                  <div className="text-xs text-slate-500">Users: {recsQ.data?.summary?.users ?? 0}</div>
+                </div>
+                <div className="rounded-2xl border border-emerald-500/15 bg-slate-900/30 p-4">
+                  <div className="text-xs text-slate-400">Done</div>
+                  <div className="text-2xl font-semibold text-slate-100">{recsQ.data?.summary?.done ?? 0}</div>
+                  <div className="text-xs text-slate-500">Dismissed: {recsQ.data?.summary?.dismissed ?? 0}</div>
+                </div>
+                <div className="rounded-2xl border border-emerald-500/15 bg-slate-900/30 p-4">
+                  <div className="text-xs text-slate-400">Useful feedback</div>
+                  <div className="text-2xl font-semibold text-slate-100">{recsQ.data?.summary?.useful ?? 0}</div>
+                  <div className="text-xs text-slate-500">Not useful: {recsQ.data?.summary?.notUseful ?? 0}</div>
+                </div>
+                <div className="rounded-2xl border border-emerald-500/15 bg-slate-900/30 p-4">
+                  <div className="text-xs text-slate-400">Avg estimated savings</div>
+                  <div className="text-2xl font-semibold text-slate-100">
+                    {Number(recsQ.data?.summary?.avgEstimatedKgSaved ?? 0).toFixed?.(2) ?? 0} kg
+                  </div>
+                  <div className="text-xs text-slate-500">Across saved items</div>
+                </div>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-left text-slate-400 border-b border-slate-800">
+                      <th className="py-2 pr-3">Rule</th>
+                      <th className="py-2 pr-3">Total</th>
+                      <th className="py-2 pr-3">Useful rate</th>
+                      <th className="py-2 pr-3">Done rate</th>
+                      <th className="py-2 pr-3">Dismiss rate</th>
+                      <th className="py-2">Avg kg saved</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(recsQ.data?.byRule || []).map((r) => (
+                      <tr key={r.ruleId} className="border-b border-slate-900">
+                        <td className="py-2 pr-3 text-slate-200">{r.ruleId}</td>
+                        <td className="py-2 pr-3 text-slate-300">{r.total}</td>
+                        <td className="py-2 pr-3 text-slate-300">{pct(r.usefulRate)}</td>
+                        <td className="py-2 pr-3 text-slate-300">{pct(r.doneRate)}</td>
+                        <td className="py-2 pr-3 text-slate-300">{pct(r.dismissRate)}</td>
+                        <td className="py-2 text-slate-300">
+                          {Number(r.avgEstimatedKgSaved ?? 0).toFixed?.(2) ?? r.avgEstimatedKgSaved}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
         </Card>
