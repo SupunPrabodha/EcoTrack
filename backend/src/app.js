@@ -15,6 +15,7 @@ import habitsRoutes from "./routes/habits.routes.js";
 import emissionsRoutes from "./routes/emissions.routes.js";
 import goalsRoutes from "./routes/goals.routes.js";
 import recommendationsRoutes from "./routes/recommendations.routes.js";
+import reportsRoutes from "./routes/reports.routes.js";
 import healthRoutes from "./routes/health.routes.js";
 import adminRoutes from "./routes/admin.routes.js";
 import mapRoutes from "./routes/map.routes.js";
@@ -86,6 +87,7 @@ export function createApp() {
   app.use("/api/emissions", emissionsRoutes);
   app.use("/api/goals", goalsRoutes);
   app.use("/api/recommendations", recommendationsRoutes);
+  app.use("/api/reports", reportsRoutes);
   app.use("/api/admin", adminRoutes);
   app.use("/api/map", mapRoutes);
 
