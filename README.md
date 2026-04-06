@@ -227,6 +227,15 @@ Backend (API):
   - `GET /recommendations/generate?from=...&to=...`
   - `PATCH /recommendations/:id/feedback` with the examples above.
 
+## Viva Evidence Checklist (Suggested)
+
+- Screenshot: Recommendations → Generate shows at least one tip with “Estimated impact”.
+- Screenshot: Save a tip → it appears under “Saved Recommendations”.
+- Screenshot: Click `Dismiss 7d` → item disappears from the saved list (hidden until expiry).
+- Screenshot: Click `Useful` / `Not useful` → saved items reorder (useful first).
+- Screenshot: Swagger UI shows `PATCH /recommendations/{id}/feedback`.
+- Test proof: `cd backend; pnpm test` passing (include terminal output).
+
 ### Admin (`/admin`) (Mixed: bootstrap public, rest admin-only)
 
 - `POST /admin/bootstrap` (Public but server-gated) — bootstrap first admin (demo only)

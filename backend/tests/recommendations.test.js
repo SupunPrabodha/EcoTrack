@@ -49,6 +49,8 @@ test("PATCH /api/recommendations/:id/feedback updates status/rating/dismiss", as
   expect(updated.rating).toBe("useful");
   expect(updated.feedbackNote).toBe("nice");
   expect(updated.dismissedUntil).toBeTruthy();
+  expect(Array.isArray(updated.audit)).toBe(true);
+  expect(updated.audit.length).toBeGreaterThan(0);
 });
 
 test("PATCH /api/recommendations/:id/feedback enforces ownership", async () => {
@@ -103,4 +105,79 @@ test("GET /api/recommendations/generate includes goal tip when goal exceeded", a
 
   const goalTip = tips.find((t) => t.ruleId === "goal_progress");
   expect(goalTip).toBeTruthy();
+});
+
+test("GET /api/recommendations ranks useful first and hides active dismissals", async () => {
+  const future = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+
+  const useful = await Recommendation.create({
+    userId,
+    title: "Useful rec",
+    body: "Something good.",
+    impact: "Low",
+    saved: true,
+    status: "saved",
+    rating: "useful",
+    evidence: { why: ["x"] },
+  });
+
+  const notUseful = await Recommendation.create({
+    userId,
+    title: "Not useful rec",
+    body: "Something else.",
+    impact: "Low",
+    saved: true,
+    status: "saved",
+    rating: "not_useful",
+    evidence: { why: ["x"] },
+  });
+
+  const dismissed = await Recommendation.create({
+    userId,
+    title: "Dismissed rec",
+    body: "Hidden for now.",
+    impact: "Low",
+    saved: true,
+    status: "dismissed",
+    dismissedUntil: future,
+    evidence: { why: ["x"] },
+  });
+
+  const res = await request(app).get("/api/recommendations").set("Cookie", cookie).query({ page: 1, limit: 10 });
+  expect(res.status).toBe(200);
+  const items = res.body?.data?.items || [];
+
+  // dismissed with future dismissedUntil should be hidden
+  expect(items.some((r) => String(r._id) === String(dismissed._id))).toBe(false);
+
+  // useful should rank above not_useful
+  const idxUseful = items.findIndex((r) => String(r._id) === String(useful._id));
+  const idxNotUseful = items.findIndex((r) => String(r._id) === String(notUseful._id));
+  expect(idxUseful).toBeGreaterThanOrEqual(0);
+  expect(idxNotUseful).toBeGreaterThanOrEqual(0);
+  expect(idxUseful).toBeLessThan(idxNotUseful);
+});
+
+test("Dismissed items reappear after expiry (auto-reset)", async () => {
+  const past = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+  const dismissed = await Recommendation.create({
+    userId,
+    title: "Dismissed expired",
+    body: "Should reappear.",
+    impact: "Low",
+    saved: true,
+    status: "dismissed",
+    dismissedUntil: past,
+    evidence: { why: ["x"] },
+  });
+
+  const res = await request(app).get("/api/recommendations").set("Cookie", cookie).query({ page: 1, limit: 10 });
+  expect(res.status).toBe(200);
+  const items = res.body?.data?.items || [];
+  expect(items.some((r) => String(r._id) === String(dismissed._id))).toBe(true);
+
+  const refreshed = await Recommendation.findById(dismissed._id).lean();
+  expect(refreshed.status).toBe("saved");
+  expect(refreshed.dismissedUntil).toBeFalsy();
 });

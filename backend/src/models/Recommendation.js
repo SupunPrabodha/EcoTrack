@@ -59,6 +59,17 @@ const recommendationSchema = new mongoose.Schema(
     dismissedUntil: { type: Date },
     rating: { type: String, enum: ["useful", "not_useful"] },
     feedbackNote: { type: String, trim: true, maxlength: 300 },
+
+    audit: {
+      type: [
+        {
+          at: { type: Date, default: Date.now },
+          action: { type: String, required: true, trim: true, maxlength: 60 },
+          meta: { type: Object },
+        },
+      ],
+      default: undefined,
+    },
   },
   { timestamps: true }
 );

@@ -7,6 +7,13 @@ import { normalizePagination, pagesFromTotal } from "../utils/pagination.js";
 import { Goal } from "../models/Goal.js";
 import { EmissionEntry } from "../models/EmissionEntry.js";
 
+function pushAudit(rec, action, meta) {
+  const entry = { at: new Date(), action, meta };
+  const existing = Array.isArray(rec.audit) ? rec.audit : [];
+  const next = [...existing, entry];
+  rec.audit = next.length > 30 ? next.slice(next.length - 30) : next;
+}
+
 function toObjectIdIfPossible(id) {
   if (mongoose.Types.ObjectId.isValid(id)) return new mongoose.Types.ObjectId(id);
   return id;
@@ -197,12 +204,25 @@ export async function buildRecommendations(userId, from, to) {
 }
 
 export async function saveRecommendation({ userId, ruleId, title, body, impact, context, evidence }) {
-  return Recommendation.create({ userId, ruleId, title, body, impact, context, evidence, saved: true });
+  const rec = await Recommendation.create({ userId, ruleId, title, body, impact, context, evidence, saved: true });
+  try {
+    pushAudit(rec, "saved", { ruleId: ruleId || undefined, impact: impact || undefined });
+    await rec.save();
+  } catch {
+    // best-effort audit trail
+  }
+  return rec;
 }
 
 export async function updateRecommendationFeedback({ userId, id, feedback }) {
   const rec = await Recommendation.findOne({ _id: id, userId, saved: true });
   if (!rec) throw new ApiError(404, "Recommendation not found");
+
+  const before = {
+    status: rec.status,
+    rating: rec.rating,
+    dismissedUntil: rec.dismissedUntil,
+  };
 
   if (feedback.status !== undefined) {
     rec.status = feedback.status;
@@ -219,12 +239,27 @@ export async function updateRecommendationFeedback({ userId, id, feedback }) {
   if (feedback.rating !== undefined) rec.rating = feedback.rating;
   if (feedback.feedbackNote !== undefined) rec.feedbackNote = feedback.feedbackNote || undefined;
 
+  const after = {
+    status: rec.status,
+    rating: rec.rating,
+    dismissedUntil: rec.dismissedUntil,
+  };
+  pushAudit(rec, "feedback", { before, after, dismissDays: feedback.dismissDays, note: feedback.feedbackNote ? true : undefined });
+
   await rec.save();
   return rec;
 }
 
 export async function listRecommendations({ userId, page, limit, search, impact }) {
-  const filter = { userId, saved: true };
+  const now = new Date();
+
+  // Auto-unhide expired dismissals so they re-enter the list cleanly.
+  await Recommendation.updateMany(
+    { userId: toObjectIdIfPossible(userId), saved: true, status: "dismissed", dismissedUntil: { $lte: now } },
+    { $set: { status: "saved" }, $unset: { dismissedUntil: 1 } }
+  );
+
+  const filter = { userId: toObjectIdIfPossible(userId), saved: true };
   if (impact) filter.impact = impact;
   if (search) {
     filter.$or = [
@@ -232,9 +267,52 @@ export async function listRecommendations({ userId, page, limit, search, impact 
       { body: { $regex: search, $options: "i" } },
     ];
   }
+
+
+  // Hide currently-dismissed items until their dismissedUntil passes.
+  filter.$and = [
+    {
+      $or: [
+        { status: { $ne: "dismissed" } },
+        { status: "dismissed", dismissedUntil: { $exists: false } },
+        { status: "dismissed", dismissedUntil: null },
+        { status: "dismissed", dismissedUntil: { $lte: now } },
+      ],
+    },
+  ];
+
 	const pg = normalizePagination({ page, limit, maxLimit: 100, defaultLimit: 10 });
   const [items, total] = await Promise.all([
-    Recommendation.find(filter).sort({ createdAt: -1 }).skip(pg.skip).limit(pg.limit),
+    Recommendation.aggregate([
+      { $match: filter },
+      {
+        $addFields: {
+          statusRank: {
+            $switch: {
+              branches: [
+                { case: { $eq: ["$status", "saved"] }, then: 0 },
+                { case: { $eq: ["$status", "done"] }, then: 1 },
+                { case: { $eq: ["$status", "dismissed"] }, then: 2 },
+              ],
+              default: 0,
+            },
+          },
+          ratingRank: {
+            $switch: {
+              branches: [
+                { case: { $eq: ["$rating", "useful"] }, then: 0 },
+                { case: { $eq: ["$rating", "not_useful"] }, then: 2 },
+              ],
+              default: 1,
+            },
+          },
+        },
+      },
+      { $sort: { statusRank: 1, ratingRank: 1, createdAt: -1 } },
+      { $skip: pg.skip },
+      { $limit: pg.limit },
+      { $project: { statusRank: 0, ratingRank: 0 } },
+    ]),
     Recommendation.countDocuments(filter),
   ]);
 
