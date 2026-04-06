@@ -267,3 +267,139 @@ test("Generator applies ruleId cooldown (recently saved + dismissed suppressed)"
   expect(tips.some((t) => t.ruleId === "car_reduce")).toBe(false);
   expect(tips.some((t) => t.ruleId === "electricity_reduce")).toBe(false);
 });
+
+test("With an active goal, generator prioritizes biggest contributor first", async () => {
+  const freshCookie = await registerAndLogin(app, { email: "prio_user@example.com" });
+  const freshUser = await User.findOne({ email: "prio_user@example.com" }).lean();
+  const freshUserId = freshUser?._id;
+
+  const from = new Date("2026-04-01T00:00:00.000Z");
+  const to = new Date("2026-04-07T23:59:59.000Z");
+
+  await Goal.create({
+    userId: freshUserId,
+    title: "Weekly cap",
+    maxKg: 50,
+    startDate: from,
+    endDate: to,
+    status: "active",
+    period: "weekly",
+  });
+
+  // Create 2 contributors above thresholds with different emissionKg totals.
+  await Habit.create({
+    userId: freshUserId,
+    type: "car_km",
+    value: 120,
+    emissionKg: 10,
+    date: new Date("2026-04-02T10:00:00.000Z"),
+  });
+  await Habit.create({
+    userId: freshUserId,
+    type: "electricity_kwh",
+    value: 80,
+    emissionKg: 40,
+    date: new Date("2026-04-03T10:00:00.000Z"),
+  });
+
+  const res = await request(app)
+    .get("/api/recommendations/generate")
+    .set("Cookie", freshCookie)
+    .query({ from: from.toISOString(), to: to.toISOString() });
+
+  expect(res.status).toBe(200);
+  const tips = res.body?.data?.tips || [];
+
+  // Both rules should be present and electricity should be first (higher emissionKg).
+  const idxCar = tips.findIndex((t) => t.ruleId === "car_reduce");
+  const idxElec = tips.findIndex((t) => t.ruleId === "electricity_reduce");
+  expect(idxCar).toBeGreaterThanOrEqual(0);
+  expect(idxElec).toBeGreaterThanOrEqual(0);
+  expect(idxElec).toBeLessThan(idxCar);
+});
+
+test("PATCH /api/auth/me stores preferences and GET /api/auth/me returns them", async () => {
+  const prefCookie = await registerAndLogin(app, { email: "prefs_user@example.com" });
+
+  const patch = await request(app)
+    .patch("/api/auth/me")
+    .set("Cookie", prefCookie)
+    .send({
+      preferences: {
+        diet: "vegetarian",
+        recommendations: { excludedRuleIds: ["car_reduce", "weather_walk"] },
+      },
+    });
+
+  expect(patch.status).toBe(200);
+  expect(patch.body?.data?.preferences?.diet).toBe("vegetarian");
+  expect(Array.isArray(patch.body?.data?.preferences?.recommendations?.excludedRuleIds)).toBe(true);
+
+  const me = await request(app).get("/api/auth/me").set("Cookie", prefCookie);
+  expect(me.status).toBe(200);
+  expect(me.body?.data?.preferences?.diet).toBe("vegetarian");
+  expect(me.body?.data?.preferences?.recommendations?.excludedRuleIds).toEqual(["car_reduce", "weather_walk"]);
+});
+
+test("Generator respects preferences: vegetarian users do not get meat_reduce tip", async () => {
+  const vegCookie = await registerAndLogin(app, { email: "veg_user@example.com" });
+  const vegUser = await User.findOne({ email: "veg_user@example.com" }).lean();
+  const vegUserId = vegUser?._id;
+
+  const from = new Date("2026-05-01T00:00:00.000Z");
+  const to = new Date("2026-05-07T23:59:59.000Z");
+
+  await request(app)
+    .patch("/api/auth/me")
+    .set("Cookie", vegCookie)
+    .send({ preferences: { diet: "vegetarian" } });
+
+  // Signal that would normally generate meat_reduce.
+  await Habit.create({
+    userId: vegUserId,
+    type: "meat_meals",
+    value: 10,
+    emissionKg: 25,
+    date: new Date("2026-05-03T10:00:00.000Z"),
+  });
+
+  const res = await request(app)
+    .get("/api/recommendations/generate")
+    .set("Cookie", vegCookie)
+    .query({ from: from.toISOString(), to: to.toISOString() });
+
+  expect(res.status).toBe(200);
+  const tips = res.body?.data?.tips || [];
+  expect(tips.some((t) => t.ruleId === "meat_reduce")).toBe(false);
+});
+
+test("Generator respects preferences: excludedRuleIds suppresses specific ruleIds", async () => {
+  const exclCookie = await registerAndLogin(app, { email: "exclude_user@example.com" });
+  const exclUser = await User.findOne({ email: "exclude_user@example.com" }).lean();
+  const exclUserId = exclUser?._id;
+
+  const from = new Date("2026-05-10T00:00:00.000Z");
+  const to = new Date("2026-05-16T23:59:59.000Z");
+
+  await request(app)
+    .patch("/api/auth/me")
+    .set("Cookie", exclCookie)
+    .send({ preferences: { recommendations: { excludedRuleIds: ["car_reduce"] } } });
+
+  await Habit.create({
+    userId: exclUserId,
+    type: "car_km",
+    value: 200,
+    emissionKg: 50,
+    date: new Date("2026-05-12T10:00:00.000Z"),
+  });
+
+  const res = await request(app)
+    .get("/api/recommendations/generate")
+    .set("Cookie", exclCookie)
+    .query({ from: from.toISOString(), to: to.toISOString() });
+
+  expect(res.status).toBe(200);
+  const tips = res.body?.data?.tips || [];
+  expect(tips.some((t) => t.ruleId === "car_reduce")).toBe(false);
+});

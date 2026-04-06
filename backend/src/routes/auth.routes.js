@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { validate } from "../middlewares/validate.js";
-import { loginController, logoutController, meController, registerController } from "../controllers/auth.controller.js";
+import { loginController, logoutController, meController, registerController, updateMeController } from "../controllers/auth.controller.js";
 import { requireAuth } from "../middlewares/auth.js";
 
 /**
@@ -36,6 +36,28 @@ router.post("/register", validate(registerSchema), registerController);
 router.post("/login", validate(loginSchema), loginController);
 router.post("/logout", logoutController);
 router.get("/me", requireAuth, meController);
+
+const updateMeSchema = z.object({
+  body: z
+    .object({
+      preferences: z
+        .object({
+          diet: z.enum(["omnivore", "vegetarian", "vegan"]).nullable().optional(),
+          transportMode: z.enum(["car", "public", "mixed", "bike", "walk", "remote"]).nullable().optional(),
+          recommendations: z
+            .object({
+              excludedRuleIds: z.array(z.string().min(1).max(80)).max(30).nullable().optional(),
+            })
+            .optional(),
+        })
+        .optional(),
+    })
+    .strict(),
+  params: z.object({}),
+  query: z.object({}),
+});
+
+router.patch("/me", requireAuth, validate(updateMeSchema), updateMeController);
 
 /**
  * @openapi
@@ -90,6 +112,34 @@ router.get("/me", requireAuth, meController);
  *     responses:
  *       200:
  *         description: OK
+ *       401:
+ *         description: Unauthorized
+ */
+
+/**
+ * @openapi
+ * /auth/me:
+ *   patch:
+ *     tags: [Auth]
+ *     summary: Update current user's preferences (personalization)
+ *     security:
+ *       - cookieAuth: []
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           example:
+ *             preferences:
+ *               diet: vegetarian
+ *               transportMode: public
+ *               recommendations:
+ *                 excludedRuleIds: ["car_reduce"]
+ *     responses:
+ *       200:
+ *         description: OK
+ *       400:
+ *         description: Validation failed
  *       401:
  *         description: Unauthorized
  */

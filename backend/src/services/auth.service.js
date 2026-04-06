@@ -35,3 +35,66 @@ export async function login({ email, password }) {
 
 	return { user, token };
 }
+
+function normalizeExcludedRuleIds(value) {
+	if (!Array.isArray(value)) return undefined;
+	const next = [];
+	const seen = new Set();
+	for (const raw of value) {
+		if (typeof raw !== "string") continue;
+		const s = raw.trim();
+		if (!s || s.length > 80) continue;
+		if (seen.has(s)) continue;
+		seen.add(s);
+		next.push(s);
+		if (next.length >= 30) break;
+	}
+	return next;
+}
+
+export async function getMe({ userId }) {
+	const user = await User.findById(userId).select("name email role preferences").lean();
+	if (!user) throw new ApiError(404, "User not found");
+	return {
+		id: user._id,
+		userId: user._id,
+		name: user.name,
+		email: user.email,
+		role: user.role,
+		preferences: user.preferences || {},
+	};
+}
+
+export async function updateMe({ userId, patch }) {
+	const user = await User.findById(userId);
+	if (!user) throw new ApiError(404, "User not found");
+
+	const prefs = user.preferences || {};
+	const incoming = patch?.preferences || {};
+
+	if (Object.prototype.hasOwnProperty.call(incoming, "diet")) {
+		prefs.diet = incoming.diet ?? undefined;
+	}
+
+	if (Object.prototype.hasOwnProperty.call(incoming, "transportMode")) {
+		prefs.transportMode = incoming.transportMode ?? undefined;
+	}
+
+	if (incoming.recommendations && Object.prototype.hasOwnProperty.call(incoming.recommendations, "excludedRuleIds")) {
+		const normalized = normalizeExcludedRuleIds(incoming.recommendations.excludedRuleIds);
+		prefs.recommendations = prefs.recommendations || {};
+		prefs.recommendations.excludedRuleIds = normalized;
+	}
+
+	user.preferences = prefs;
+	await user.save();
+
+	return {
+		id: user._id,
+		userId: user._id,
+		name: user.name,
+		email: user.email,
+		role: user.role,
+		preferences: user.preferences || {},
+	};
+}

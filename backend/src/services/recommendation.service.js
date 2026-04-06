@@ -7,6 +7,7 @@ import { normalizePagination, pagesFromTotal } from "../utils/pagination.js";
 import { Goal } from "../models/Goal.js";
 import { EmissionEntry } from "../models/EmissionEntry.js";
 import { env } from "../config/env.js";
+import { User } from "../models/User.js";
 
 function pushAudit(rec, action, meta) {
   const entry = { at: new Date(), action, meta };
@@ -97,6 +98,16 @@ async function emissionsTotalForRange(userId, from, to) {
 export async function buildRecommendations(userId, from, to) {
   const range = clampDateRange(from, to);
 
+  const user = await User.findById(toObjectIdIfPossible(userId)).select("preferences").lean();
+  const prefs = user?.preferences || {};
+  const excludedRuleIds = new Set(
+    Array.isArray(prefs?.recommendations?.excludedRuleIds) ? prefs.recommendations.excludedRuleIds : []
+  );
+
+  // Derived personalization rules (optional): when set, filter out irrelevant tips.
+  if (prefs?.diet === "vegetarian" || prefs?.diet === "vegan") excludedRuleIds.add("meat_reduce");
+  if (["walk", "bike", "public", "remote"].includes(prefs?.transportMode)) excludedRuleIds.add("car_reduce");
+
   const stats = await Habit.aggregate([
     { $match: { userId: toObjectIdIfPossible(userId), date: { $gte: range.from, $lte: range.to } } },
     { $group: { _id: "$type", totalValue: { $sum: "$value" }, totalKg: { $sum: "$emissionKg" } } }
@@ -161,6 +172,7 @@ export async function buildRecommendations(userId, from, to) {
 
   const pushTip = (tip) => {
     if (tip?.ruleId && blockedRuleIds.has(tip.ruleId)) return;
+    if (tip?.ruleId && excludedRuleIds.has(tip.ruleId)) return;
     tips.push(tip);
   };
 
@@ -277,6 +289,31 @@ export async function buildRecommendations(userId, from, to) {
     if (seen.has(key)) continue;
     seen.add(key);
     deduped.push(tip);
+  }
+
+  // Goal-driven prioritization: when a goal is active, show the most impactful contributor first.
+  // Uses habit emission totals as a proxy for "biggest contributor" in the selected range.
+  if (goalEvidence && deduped.length > 1) {
+    const contributorKg = {
+      car_reduce: habitsEvidence?.car_km?.totalKg || 0,
+      electricity_reduce: habitsEvidence?.electricity_kwh?.totalKg || 0,
+      meat_reduce: habitsEvidence?.meat_meals?.totalKg || 0,
+      goal_progress:
+        Math.max(
+          habitsEvidence?.car_km?.totalKg || 0,
+          habitsEvidence?.electricity_kwh?.totalKg || 0,
+          habitsEvidence?.meat_meals?.totalKg || 0
+        ) + 0.01,
+    };
+
+    const withRank = deduped.map((t, idx) => ({
+      t,
+      idx,
+      kg: contributorKg[t.ruleId] ?? 0,
+    }));
+
+    withRank.sort((a, b) => (b.kg - a.kg) || (a.idx - b.idx));
+    for (let i = 0; i < deduped.length; i += 1) deduped[i] = withRank[i].t;
   }
 
   return { weather: weather || null, tips: deduped, evidence, confidence };
