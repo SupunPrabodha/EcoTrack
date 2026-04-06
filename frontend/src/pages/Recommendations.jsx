@@ -367,6 +367,18 @@ export default function Recommendations() {
                         {r.evidence.why.map((line, idx) => (
                           <div key={idx}>• {line}</div>
                         ))}
+
+                        {(r.confidence || r?.evidence?.dataUsed?.sources?.length) && (
+                          <div className="pt-2 text-slate-400 space-y-1">
+                            {r.confidence ? <div>Confidence: {r.confidence}</div> : null}
+                            {r?.evidence?.dataUsed?.sources?.length ? (
+                              <div>
+                                Data used: {r.evidence.dataUsed.sources.join(", ")}
+                                {r.evidence.dataUsed.habitTypes?.length ? ` (${r.evidence.dataUsed.habitTypes.join(", ")})` : ""}
+                              </div>
+                            ) : null}
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>

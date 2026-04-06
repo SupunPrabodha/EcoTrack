@@ -220,6 +220,8 @@ Frontend (UI):
 - Tips may show an “Estimated impact” line (kg CO2e) when enough data exists.
 - Save a tip, then in the Saved section use: `Done`, `Dismiss 7d`, `Useful`, `Not useful`.
 - The saved card shows `Status` and (when dismissed) the `dismissedUntil` date.
+- Open “Why was this suggested?” → shows `Confidence` and `Data used` (habits/weather/goals).
+- Cooldown: the generator won’t repeat the same `ruleId` for a few days (default 7) and will respect dismissals.
 
 Backend (API):
 

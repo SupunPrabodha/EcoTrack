@@ -4,6 +4,7 @@ import { User } from "../src/models/User.js";
 import { Recommendation } from "../src/models/Recommendation.js";
 import { Goal } from "../src/models/Goal.js";
 import { EmissionEntry } from "../src/models/EmissionEntry.js";
+import { Habit } from "../src/models/Habit.js";
 
 let app;
 let mongo;
@@ -107,6 +108,36 @@ test("GET /api/recommendations/generate includes goal tip when goal exceeded", a
   expect(goalTip).toBeTruthy();
 });
 
+test("POST /api/recommendations normalizes explainability (why + dataUsed + confidence)", async () => {
+  const from = new Date("2026-02-01T00:00:00.000Z");
+  const to = new Date("2026-02-07T23:59:59.000Z");
+
+  const res = await request(app)
+    .post("/api/recommendations")
+    .set("Cookie", cookie)
+    .send({
+      ruleId: "car_reduce",
+      title: "Test save",
+      body: "Try reducing your car usage for a week.",
+      impact: "Medium",
+      context: { range: { from: from.toISOString(), to: to.toISOString() } },
+      evidence: {
+        // intentionally omit why
+        range: { from: from.toISOString(), to: to.toISOString() },
+        habits: { car_km: { totalValue: 100, totalKg: 20 } },
+      },
+    });
+
+  expect(res.status).toBe(201);
+  const saved = res.body?.data;
+  expect(saved).toBeTruthy();
+  expect(saved.confidence).toBeDefined();
+  expect(["low", "medium", "high"]).toContain(saved.confidence);
+  expect(Array.isArray(saved?.evidence?.why)).toBe(true);
+  expect(saved.evidence.why.length).toBeGreaterThan(0);
+  expect(saved?.evidence?.dataUsed?.sources?.length).toBeGreaterThan(0);
+});
+
 test("GET /api/recommendations ranks useful first and hides active dismissals", async () => {
   const future = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
@@ -180,4 +211,59 @@ test("Dismissed items reappear after expiry (auto-reset)", async () => {
   const refreshed = await Recommendation.findById(dismissed._id).lean();
   expect(refreshed.status).toBe("saved");
   expect(refreshed.dismissedUntil).toBeFalsy();
+});
+
+test("Generator applies ruleId cooldown (recently saved + dismissed suppressed)", async () => {
+  const from = new Date("2026-03-01T00:00:00.000Z");
+  const to = new Date("2026-03-07T23:59:59.000Z");
+
+  // Habit signals that would normally generate car_reduce and electricity_reduce
+  await Habit.create({
+    userId,
+    type: "car_km",
+    value: 120,
+    emissionKg: 30,
+    date: new Date("2026-03-03T10:00:00.000Z"),
+  });
+  await Habit.create({
+    userId,
+    type: "electricity_kwh",
+    value: 80,
+    emissionKg: 20,
+    date: new Date("2026-03-04T10:00:00.000Z"),
+  });
+
+  // Recently saved car_reduce => should be suppressed
+  await Recommendation.create({
+    userId,
+    ruleId: "car_reduce",
+    title: "Prev car tip",
+    body: "...",
+    impact: "High",
+    saved: true,
+    evidence: { why: ["x"] },
+  });
+
+  // Dismissed electricity_reduce until future => should be suppressed
+  await Recommendation.create({
+    userId,
+    ruleId: "electricity_reduce",
+    title: "Prev electricity tip",
+    body: "...",
+    impact: "Medium",
+    saved: true,
+    status: "dismissed",
+    dismissedUntil: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000),
+    evidence: { why: ["x"] },
+  });
+
+  const res = await request(app)
+    .get("/api/recommendations/generate")
+    .set("Cookie", cookie)
+    .query({ from: from.toISOString(), to: to.toISOString() });
+
+  expect(res.status).toBe(200);
+  const tips = res.body?.data?.tips || [];
+  expect(tips.some((t) => t.ruleId === "car_reduce")).toBe(false);
+  expect(tips.some((t) => t.ruleId === "electricity_reduce")).toBe(false);
 });

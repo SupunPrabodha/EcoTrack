@@ -29,6 +29,11 @@ const recommendationSchema = new mongoose.Schema(
     evidence: {
       why: [{ type: String, trim: true, maxlength: 200 }],
       estimatedKgSaved: { type: Number, min: 0 },
+      dataUsed: {
+        sources: [{ type: String, trim: true, maxlength: 30 }],
+        habitTypes: [{ type: String, trim: true, maxlength: 40 }],
+        rangeDays: { type: Number, min: 0 },
+      },
       habits: {
         car_km: { totalValue: Number, totalKg: Number },
         electricity_kwh: { totalValue: Number, totalKg: Number },
@@ -51,6 +56,9 @@ const recommendationSchema = new mongoose.Schema(
         to: Date,
       },
     },
+
+    // Simple trust signal for explainability UX
+    confidence: { type: String, enum: ["low", "medium", "high"], default: "low" },
 
     saved: { type: Boolean, default: true },
 
