@@ -6,6 +6,23 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "../api/client";
 import { IconCalendar, IconFlame, IconLeaf, IconSave, IconTarget, IconWarning } from "../components/Icons";
 
+function formatDate(dateStr) {
+  if (!dateStr) return "—";
+  const d = new Date(dateStr);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleDateString(undefined, {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+function formatDateRange(start, end) {
+  if (!start || !end) return "—";
+  return `${formatDate(start)} 
+  – ${formatDate(end)}`;
+}
+
 function getDailyRange() {
   const now = new Date();
   const start = new Date(now);
@@ -49,9 +66,6 @@ function GoalOverviewRow({ period, label }) {
   const currentGoal = items.find((g) => g.period === period) || null;
 
   const evalQ = useQuery({
-    // Share the same key as the main GoalSection evaluation so
-    // React Query deduplicates the POST /goals/:id/evaluate call
-    // and we don't trigger alerts/emails twice.
     queryKey: ["goal-evaluate", period, currentGoal?._id],
     enabled: !!currentGoal?._id,
     queryFn: async () => (await api.post(`/goals/${currentGoal._id}/evaluate`)).data.data,
@@ -146,8 +160,6 @@ function GoalSection({
         ...(alertsEnabled && alertEmail ? { alertEmail } : {}),
       }),
     onSuccess: () => {
-      // Invalidate all goal-related queries so both the main section
-      // and the right-side overview stay in sync.
       qc.invalidateQueries({ queryKey: ["goals"] });
     },
   });
@@ -267,6 +279,66 @@ function GoalSection({
   );
 }
 
+function CompletedGoalsList() {
+  const completedQ = useQuery({
+    queryKey: ["goals", "completed"],
+    queryFn: async () =>
+      (
+        await api.get("/goals", {
+          params: { page: 1, limit: 20 },
+        })
+      ).data.data,
+  });
+
+  const items = (completedQ.data?.items || []).filter(
+    (g) => g.status === "achieved" || g.status === "failed"
+  );
+
+  return (
+    <div className="space-y-2 text-xs sm:text-sm">
+      <div className="flex items-center justify-between">
+        {completedQ.isLoading && <span className="text-slate-500">Loading…</span>}
+      </div>
+
+      {!completedQ.isLoading && items.length === 0 && (
+        <div className="text-slate-500">No completed goals yet.</div>
+      )}
+
+      {items.length > 0 && (
+        <ul className="space-y-1 max-h-40 overflow-y-auto pr-1">
+          {items.map((goal) => (
+            <li
+              key={goal._id}
+              className="flex items-center justify-between rounded-lg bg-slate-900/60 border border-slate-800 px-3 py-2"
+            >
+              <div className="flex flex-col">
+                <span className="text-slate-200 text-xs sm:text-sm truncate max-w-[10rem] sm:max-w-[14rem]">
+                  {goal.title}
+                </span>
+                <span className="text-[11px] text-slate-500">
+                  Target ≤ {goal.maxKg} kg · {goal.period}
+                </span>
+                <span className="text-[11px] text-slate-500">
+                  {formatDateRange(goal.startDate, goal.endDate)}
+                </span>
+              </div>
+              <span
+                className={`text-[11px] px-2 py-0.5 rounded-full border  ${
+                  goal.status === "achieved"
+                    ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
+                    : "bg-red-500/10 text-red-300 border-red-500/30"
+                }`}
+              >
+                {goal.status === "achieved" ? "Achieved" : "Failed"}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 export default function Goals() {
   const [period, setPeriod] = useState("daily");
 
@@ -326,7 +398,7 @@ export default function Goals() {
             sub={
               <span className="inline-flex items-center gap-2">
                 <IconCalendar width={16} height={16} />
-                <span className="text-xs text-slate-400">World Bank global CO2 per-capita data</span>
+                <span className="text-xs text-slate-400">World Bank global CO₂ per-capita data</span>
               </span>
             }
           />
@@ -415,6 +487,10 @@ export default function Goals() {
             </div>
           </Card>
         </div>
+
+        <Card title="Completed goals">
+          <CompletedGoalsList />
+        </Card>
       </div>
     </div>
   );
