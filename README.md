@@ -143,6 +143,16 @@ After login, try these:
   - `GET {{baseUrl}}/recommendations/generate?from=2026-02-01T00:00:00.000Z&to=2026-02-15T23:59:59.999Z`
   - Expected: `200 OK` with a list of generated tips
 
+- Feedback workflow for saved recommendations (mark done / dismiss / rate)
+  1) Save a recommendation you like
+     - `POST {{baseUrl}}/recommendations`
+  2) Update its workflow/feedback
+     - `PATCH {{baseUrl}}/recommendations/:id/feedback`
+     - Body examples (JSON):
+       - Mark as done: `{ "status": "done" }`
+       - Dismiss 7 days: `{ "dismissDays": 7 }`
+       - Rate useful: `{ "rating": "useful" }`
+
 ### 4) Admin-only endpoints
 
 Admin endpoints require a user with role `admin`.
@@ -199,7 +209,43 @@ Admin endpoints require a user with role `admin`.
 - `GET /recommendations` — list saved recommendations (pagination + search + impact filter)
 - `GET /recommendations/:id` — get saved recommendation
 - `PUT /recommendations/:id` — update saved recommendation
+- `PATCH /recommendations/:id/feedback` — update status/dismiss/rating for a saved recommendation
 - `DELETE /recommendations/:id` — delete saved recommendation
+
+## How to Check (Recommendation Upgrades)
+
+Frontend (UI):
+
+- Go to Recommendations → Generate.
+- Tips may show an “Estimated impact” line (kg CO2e) when enough data exists.
+- Save a tip, then in the Saved section use: `Done`, `Dismiss 7d`, `Useful`, `Not useful`.
+- The saved card shows `Status` and (when dismissed) the `dismissedUntil` date.
+- Open “Why was this suggested?” → shows `Confidence` and `Data used` (habits/weather/goals).
+- Cooldown: the generator won’t repeat the same `ruleId` for a few days (default 7) and will respect dismissals.
+- With an active goal overlapping the selected range, generated tips are ordered by biggest emission contributor first.
+
+Backend (API):
+
+- Use Postman:
+  - `GET /recommendations/generate?from=...&to=...`
+  - `PATCH /recommendations/:id/feedback` with the examples above.
+  - Personalization (optional but recommended for viva):
+    - `PATCH /auth/me` with:
+      - `preferences.diet` = `vegetarian` or `vegan` (suppresses `meat_reduce`)
+      - `preferences.transportMode` = `public|walk|bike|remote` (suppresses `car_reduce`)
+      - `preferences.recommendations.excludedRuleIds` = `["car_reduce", ...]` (manual opt-out)
+    - Then run `GET /recommendations/generate?from=...&to=...` and confirm excluded `ruleId`s do not appear.
+
+## Viva Evidence Checklist (Suggested)
+
+- Screenshot: Recommendations → Generate shows at least one tip with “Estimated impact”.
+- Screenshot: Save a tip → it appears under “Saved Recommendations”.
+- Screenshot: Click `Dismiss 7d` → item disappears from the saved list (hidden until expiry).
+- Screenshot: Click `Useful` / `Not useful` → saved items reorder (useful first).
+- Screenshot: Swagger UI shows `PATCH /recommendations/{id}/feedback`.
+- Screenshot: Swagger UI shows `PATCH /auth/me` (preferences personalization).
+- Screenshot: Swagger UI shows `GET /admin/analytics/recommendations` (useful/done rates by ruleId).
+- Test proof: `cd backend; pnpm test` passing (include terminal output).
 
 ### Admin (`/admin`) (Mixed: bootstrap public, rest admin-only)
 
@@ -209,6 +255,7 @@ Admin endpoints require a user with role `admin`.
 - `GET /admin/analytics/emissions` (Admin) — global emissions analytics
 - `GET /admin/leaderboard/emissions` (Admin) — leaderboard
 - `GET /admin/analytics/goals` (Admin) — goal performance analytics
+- `GET /admin/analytics/recommendations` (Admin) — recommendation effectiveness analytics by ruleId
 
 ### Health (`/health`) (Public)
 

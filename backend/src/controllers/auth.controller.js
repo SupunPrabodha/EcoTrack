@@ -1,5 +1,5 @@
 import { asyncHandler } from "../utils/asyncHandler.js";
-import { register, login } from "../services/auth.service.js";
+import { register, login, getMe, updateMe } from "../services/auth.service.js";
 import { env } from "../config/env.js";
 import { sendCreated, sendSuccess } from "../utils/response.js";
 
@@ -31,7 +31,7 @@ function cookieOptions() {
 export const registerController = asyncHandler(async (req, res) => {
   const { name, email, password } = req.validated.body;
   const user = await register({ name, email, password });
-  sendCreated(res, { data: { id: user._id, name: user.name, email: user.email, role: user.role } });
+  sendCreated(res, { data: { id: user._id, name: user.name, email: user.email, role: user.role, preferences: user.preferences || {} } });
 });
 
 export const loginController = asyncHandler(async (req, res) => {
@@ -43,7 +43,7 @@ export const loginController = asyncHandler(async (req, res) => {
     maxAge: expiresInToMs(env.JWT_EXPIRES_IN),
   });
 
-  sendSuccess(res, { data: { id: user._id, name: user.name, email: user.email, role: user.role } });
+  sendSuccess(res, { data: { id: user._id, name: user.name, email: user.email, role: user.role, preferences: user.preferences || {} } });
 });
 
 export const logoutController = asyncHandler(async (req, res) => {
@@ -54,5 +54,11 @@ export const logoutController = asyncHandler(async (req, res) => {
 });
 
 export const meController = asyncHandler(async (req, res) => {
-  sendSuccess(res, { data: req.user });
+  const data = await getMe({ userId: req.user.userId });
+  sendSuccess(res, { data });
+});
+
+export const updateMeController = asyncHandler(async (req, res) => {
+  const data = await updateMe({ userId: req.user.userId, patch: req.validated.body });
+  sendSuccess(res, { data });
 });
