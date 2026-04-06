@@ -139,17 +139,25 @@ export async function evaluateGoalProgress({ userId, id }) {
   let emailResult = { sent: false, reason: "alerts_disabled" };
 
   if (goal.alertsEnabled && exceeded) {
-    const user = await User.findById(userId);
-    const toEmail = goal.alertEmail || user?.email;
-    if (toEmail) {
-      const subject = `EcoTrack Goal Alert: ${goal.title}`;
-      const text =
-        `Your emissions for this goal period have exceeded the target.\n\n` +
-        `Goal: ${goal.title}\nTarget (max): ${goal.maxKg} kg CO2e\nCurrent: ${currentKg.toFixed(2)} kg CO2e\nRemaining: ${remainingKg.toFixed(2)} kg CO2e\n`;
-      emailResult = await sendGoalAlertEmail({ to: toEmail, subject, text });
-      goal.lastAlertAt = new Date();
-    } else {
-      emailResult = { sent: false, reason: "no_email" };
+    const previousTotal = typeof goal.lastAlertTotalKg === "number" ? goal.lastAlertTotalKg : 0;
+    const hasIncreasedSinceLastAlert = currentKg > previousTotal;
+
+    if (hasIncreasedSinceLastAlert) {
+      const user = await User.findById(userId);
+      const toEmail = goal.alertEmail || user?.email;
+      if (toEmail) {
+        const subject = `EcoTrack Goal Alert: ${goal.title}`;
+        const text =
+          `Your emissions for this goal period have exceeded the target.\n\n` +
+          `Goal: ${goal.title}\nTarget (max): ${goal.maxKg} kg CO2e\nCurrent: ${currentKg.toFixed(2)} kg CO2e\nRemaining: ${remainingKg.toFixed(2)} kg CO2e\n`;
+        emailResult = await sendGoalAlertEmail({ to: toEmail, subject, text });
+        goal.lastAlertAt = new Date();
+        goal.lastAlertTotalKg = currentKg;
+      } else {
+        emailResult = { sent: false, reason: "no_email" };
+      }
+    } else if (goal.lastAlertAt) {
+      emailResult = { sent: false, reason: "already_sent" };
     }
   }
 

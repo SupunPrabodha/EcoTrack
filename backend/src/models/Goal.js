@@ -59,6 +59,10 @@ const goalSchema = new mongoose.Schema(
     lastAlertAt: {
       type: Date,
     },
+    lastAlertTotalKg: {
+      type: Number,
+      min: 0,
+    },
   },
   { timestamps: true }
 );
