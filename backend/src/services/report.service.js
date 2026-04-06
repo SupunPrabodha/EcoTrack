@@ -4,7 +4,7 @@ import { buildRecommendations } from "./recommendation.service.js";
 import { ApiError } from "../utils/ApiError.js";
 import { Recommendation } from "../models/Recommendation.js";
 import { User } from "../models/User.js";
-import { fmtDate, fmtDateTime, pct, renderPdf } from "../utils/pdf.js";
+import { BRAND, drawBrandHeader, drawKpiRow, drawKeyValue, drawSectionTitle, fmtDate, fmtDateTime, pct, renderPdf } from "../utils/pdf.js";
 import { getGlobalRecommendationAnalytics } from "./admin.service.js";
 
 function parseMonth(month) {
@@ -189,16 +189,39 @@ function safeNum(n, digits = 2) {
 }
 
 function sectionTitle(doc, text) {
-  doc.moveDown(0.6);
-  doc.fontSize(13).fillColor("#111111").text(text);
-  doc.moveDown(0.2);
-  doc.strokeColor("#dddddd").lineWidth(1).moveTo(doc.x, doc.y).lineTo(545, doc.y).stroke();
-  doc.moveDown(0.4);
+  drawSectionTitle(doc, text);
 }
 
 function keyValue(doc, k, v) {
-  doc.fontSize(10).fillColor("#444444").text(`${k}: `, { continued: true });
-  doc.fillColor("#111111").text(String(v ?? "—"));
+  drawKeyValue(doc, k, v);
+}
+
+function drawTableHeader(doc, { y, cols, headers }) {
+  const left = doc.page.margins.left;
+  const right = doc.page.width - doc.page.margins.right;
+  const h = 18;
+
+  doc.save();
+  doc.rect(left, y - 2, right - left, h).fill(BRAND.slate);
+  doc.fillColor("#ffffff").font("Helvetica-Bold").fontSize(9);
+  for (const hcol of headers) {
+    doc.text(hcol.label, cols[hcol.key], y, { width: hcol.width, ellipsis: true });
+  }
+  doc.restore();
+
+  return y + h;
+}
+
+function drawZebraRow(doc, { y, zebraOn }) {
+  const left = doc.page.margins.left;
+  const right = doc.page.width - doc.page.margins.right;
+  const h = 16;
+  if (zebraOn) {
+    doc.save();
+    doc.rect(left, y - 1, right - left, h).fill(BRAND.zebra);
+    doc.restore();
+  }
+  return y;
 }
 
 export async function generateUserRecommendationsReportPdf({ userId, from, to }) {
@@ -248,9 +271,10 @@ export async function generateUserRecommendationsReportPdf({ userId, from, to })
   const top = items.slice(0, 12);
 
   return renderPdf((doc) => {
-    doc.fontSize(20).fillColor("#111111").text("EcoTrack — Recommendations Report");
-    doc.moveDown(0.2);
-    doc.fontSize(10).fillColor("#666666").text(`Generated: ${fmtDateTime(new Date())}`);
+    drawBrandHeader(doc, {
+      title: "EcoTrack — Recommendations Report",
+      subtitle: `Generated ${fmtDateTime(new Date())} • ${fmtDate(fromD)} → ${fmtDate(toD)}`,
+    });
 
     sectionTitle(doc, "Report context");
     keyValue(doc, "User", `${user.name} <${user.email}>`);
@@ -266,17 +290,19 @@ export async function generateUserRecommendationsReportPdf({ userId, from, to })
     keyValue(doc, "Excluded ruleIds", Array.isArray(excluded) && excluded.length ? excluded.join(", ") : "—");
 
     sectionTitle(doc, "Summary");
-    keyValue(doc, "Saved recommendations", totals.total);
-    keyValue(doc, "Done", totals.done);
+
+    drawKpiRow(doc, [
+      { label: "Saved", value: totals.total, sub: "items in range" },
+      { label: "Done", value: totals.done, sub: `Rate: ${pct(doneRate)}` },
+      { label: "Useful", value: totals.useful, sub: `Rate: ${pct(usefulRate)}` },
+      { label: "Avg savings", value: `${totals.avgEstimatedKgSaved} kg`, sub: "estimated CO2e" },
+    ]);
+
     keyValue(doc, "Dismissed", totals.dismissed);
-    keyValue(doc, "Useful feedback", totals.useful);
     keyValue(doc, "Not useful feedback", totals.notUseful);
-    keyValue(doc, "Useful rate", pct(usefulRate));
-    keyValue(doc, "Done rate", pct(doneRate));
-    keyValue(doc, "Avg estimated kg saved", `${totals.avgEstimatedKgSaved} kg CO2e`);
 
     sectionTitle(doc, "Most recent saved recommendations");
-    doc.fontSize(9).fillColor("#111111");
+    doc.fontSize(9).fillColor(BRAND.text).font("Helvetica");
 
     const startX = doc.x;
     let y = doc.y;
@@ -289,30 +315,39 @@ export async function generateUserRecommendationsReportPdf({ userId, from, to })
       date: startX + 330,
     };
 
-    doc.fillColor("#666666");
-    doc.text("Rule", cols.rule, y);
-    doc.text("Status", cols.status, y);
-    doc.text("Rating", cols.rating, y);
-    doc.text("kg saved", cols.kg, y);
-    doc.text("Created", cols.date, y);
-    y += 14;
+    const headers = [
+      { key: "rule", label: "Rule", width: 105 },
+      { key: "status", label: "Status", width: 65 },
+      { key: "rating", label: "Rating", width: 70 },
+      { key: "kg", label: "kg saved", width: 65 },
+      { key: "date", label: "Created", width: 160 },
+    ];
 
-    doc.fillColor("#111111");
+    y = drawTableHeader(doc, { y, cols, headers });
+    doc.fillColor(BRAND.text).font("Helvetica").fontSize(9);
+
+    let zebra = false;
     for (const r of top) {
       if (y > 760) {
         doc.addPage();
         y = doc.y;
+        y = drawTableHeader(doc, { y, cols, headers });
+        zebra = false;
       }
-      doc.text(r.ruleId || "unknown", cols.rule, y, { width: 105 });
-      doc.text(r.status || "saved", cols.status, y, { width: 65 });
-      doc.text(r.rating || "—", cols.rating, y, { width: 70 });
-      doc.text(String(safeNum(r?.evidence?.estimatedKgSaved ?? 0, 2)), cols.kg, y, { width: 60 });
+
+      zebra = !zebra;
+      drawZebraRow(doc, { y, zebraOn: zebra });
+
+      doc.text(r.ruleId || "unknown", cols.rule, y, { width: 105, ellipsis: true });
+      doc.text(r.status || "saved", cols.status, y, { width: 65, ellipsis: true });
+      doc.text(r.rating || "—", cols.rating, y, { width: 70, ellipsis: true });
+      doc.text(String(safeNum(r?.evidence?.estimatedKgSaved ?? 0, 2)), cols.kg, y, { width: 65 });
       doc.text(fmtDate(r.createdAt), cols.date, y, { width: 160 });
-      y += 13;
+      y += 16;
     }
 
     doc.moveDown(0.8);
-    doc.fontSize(8).fillColor("#666666").text(
+    doc.fontSize(8).fillColor(BRAND.muted).font("Helvetica").text(
       "Notes: This report summarizes saved recommendations and user feedback within the selected range. Estimated impact values are approximations.",
       { align: "left" }
     );
@@ -327,9 +362,10 @@ export async function generateAdminRecommendationsReportPdf({ from, to, limit = 
   const analytics = await getGlobalRecommendationAnalytics({ from: fromD, to: toD, limit });
 
   return renderPdf((doc) => {
-    doc.fontSize(20).fillColor("#111111").text("EcoTrack — Admin Recommendation Effectiveness Report");
-    doc.moveDown(0.2);
-    doc.fontSize(10).fillColor("#666666").text(`Generated: ${fmtDateTime(new Date())}`);
+    drawBrandHeader(doc, {
+      title: "EcoTrack — Admin Effectiveness Report",
+      subtitle: `Generated ${fmtDateTime(new Date())}`,
+    });
 
     sectionTitle(doc, "Report scope");
     keyValue(
@@ -340,13 +376,20 @@ export async function generateAdminRecommendationsReportPdf({ from, to, limit = 
     keyValue(doc, "Top rules limit", analytics.limit);
 
     sectionTitle(doc, "Global summary");
-    keyValue(doc, "Saved recommendations", analytics.summary.total);
-    keyValue(doc, "Distinct users", analytics.summary.users);
-    keyValue(doc, "Done", analytics.summary.done);
+    const feedbackCount = Number(analytics.summary.useful ?? 0) + Number(analytics.summary.notUseful ?? 0);
+    const usefulRate = feedbackCount ? Number(analytics.summary.useful ?? 0) / feedbackCount : null;
+    const doneRate = analytics.summary.total ? Number(analytics.summary.done ?? 0) / Number(analytics.summary.total ?? 1) : null;
+
+    drawKpiRow(doc, [
+      { label: "Saved", value: analytics.summary.total, sub: "items" },
+      { label: "Users", value: analytics.summary.users, sub: "distinct" },
+      { label: "Useful rate", value: pct(usefulRate), sub: `Done: ${pct(doneRate)}` },
+      { label: "Avg savings", value: `${safeNum(analytics.summary.avgEstimatedKgSaved ?? 0, 2)} kg`, sub: "estimated CO2e" },
+    ]);
+
     keyValue(doc, "Dismissed", analytics.summary.dismissed);
     keyValue(doc, "Useful feedback", analytics.summary.useful);
     keyValue(doc, "Not useful feedback", analytics.summary.notUseful);
-    keyValue(doc, "Avg estimated kg saved", `${safeNum(analytics.summary.avgEstimatedKgSaved ?? 0, 2)} kg CO2e`);
 
     sectionTitle(doc, "Effectiveness by ruleId (top rules)");
 
@@ -363,32 +406,41 @@ export async function generateAdminRecommendationsReportPdf({ from, to, limit = 
       kg: startX + 420,
     };
 
-    doc.fontSize(9).fillColor("#666666");
-    doc.text("Rule", cols.rule, y);
-    doc.text("Total", cols.total, y);
-    doc.text("Useful%", cols.useful, y);
-    doc.text("Done%", cols.done, y);
-    doc.text("Dismiss%", cols.dismiss, y);
-    doc.text("Avg kg", cols.kg, y);
-    y += 14;
+    const headers = [
+      { key: "rule", label: "Rule", width: 135 },
+      { key: "total", label: "Total", width: 40 },
+      { key: "useful", label: "Useful%", width: 60 },
+      { key: "done", label: "Done%", width: 60 },
+      { key: "dismiss", label: "Dismiss%", width: 70 },
+      { key: "kg", label: "Avg kg", width: 70 },
+    ];
 
-    doc.fillColor("#111111");
+    y = drawTableHeader(doc, { y, cols, headers });
+    doc.fillColor(BRAND.text).font("Helvetica").fontSize(9);
+
+    let zebra = false;
     for (const r of rows) {
       if (y > 760) {
         doc.addPage();
         y = doc.y;
+        y = drawTableHeader(doc, { y, cols, headers });
+        zebra = false;
       }
-      doc.text(r.ruleId, cols.rule, y, { width: 135 });
-      doc.text(String(r.total ?? 0), cols.total, y);
-      doc.text(pct(r.usefulRate), cols.useful, y);
-      doc.text(pct(r.doneRate), cols.done, y);
-      doc.text(pct(r.dismissRate), cols.dismiss, y);
-      doc.text(String(safeNum(r.avgEstimatedKgSaved ?? 0, 2)), cols.kg, y);
-      y += 13;
+
+      zebra = !zebra;
+      drawZebraRow(doc, { y, zebraOn: zebra });
+
+      doc.text(r.ruleId, cols.rule, y, { width: 135, ellipsis: true });
+      doc.text(String(r.total ?? 0), cols.total, y, { width: 40 });
+      doc.text(pct(r.usefulRate), cols.useful, y, { width: 60 });
+      doc.text(pct(r.doneRate), cols.done, y, { width: 60 });
+      doc.text(pct(r.dismissRate), cols.dismiss, y, { width: 70 });
+      doc.text(String(safeNum(r.avgEstimatedKgSaved ?? 0, 2)), cols.kg, y, { width: 70 });
+      y += 16;
     }
 
     doc.moveDown(0.8);
-    doc.fontSize(8).fillColor("#666666").text(
+    doc.fontSize(8).fillColor(BRAND.muted).font("Helvetica").text(
       "Notes: Useful rate is computed from feedback only (useful vs not_useful). Done/dismiss rates are computed over all saved recommendations. Use this report to validate real-world impact and iterate recommendation rules.",
       { align: "left" }
     );
