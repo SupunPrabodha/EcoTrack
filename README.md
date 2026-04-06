@@ -244,6 +244,7 @@ Backend (API):
 - Screenshot: Click `Useful` / `Not useful` → saved items reorder (useful first).
 - Screenshot: Swagger UI shows `PATCH /recommendations/{id}/feedback`.
 - Screenshot: Swagger UI shows `PATCH /auth/me` (preferences personalization).
+- Screenshot: Swagger UI shows `GET /admin/analytics/recommendations` (useful/done rates by ruleId).
 - Test proof: `cd backend; pnpm test` passing (include terminal output).
 
 ### Admin (`/admin`) (Mixed: bootstrap public, rest admin-only)
@@ -254,6 +255,7 @@ Backend (API):
 - `GET /admin/analytics/emissions` (Admin) — global emissions analytics
 - `GET /admin/leaderboard/emissions` (Admin) — leaderboard
 - `GET /admin/analytics/goals` (Admin) — goal performance analytics
+- `GET /admin/analytics/recommendations` (Admin) — recommendation effectiveness analytics by ruleId
 
 ### Health (`/health`) (Public)
 
