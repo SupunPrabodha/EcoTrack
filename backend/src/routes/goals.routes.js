@@ -27,7 +27,7 @@ const createSchema = z.object({
     maxKg: z.number().min(0),
     startDate: z.string().datetime(),
     endDate: z.string().datetime(),
-    period: z.enum(["weekly", "monthly", "custom"]).optional(),
+    period: z.string().min(1).max(50).optional(),
     alertsEnabled: z.boolean().optional(),
     alertEmail: z.string().email().optional(),
   }),
@@ -42,6 +42,7 @@ const listSchema = z.object({
     page: z.string().default("1"),
     limit: z.string().default("10"),
     status: z.enum(["active", "achieved", "failed"]).optional(),
+    period: z.string().min(1).max(50).optional(),
     search: z.string().max(50).optional(),
   }),
 });
@@ -60,7 +61,7 @@ const updateSchema = z.object({
       startDate: z.string().datetime().optional(),
       endDate: z.string().datetime().optional(),
       status: z.enum(["active", "achieved", "failed"]).optional(),
-      period: z.enum(["weekly", "monthly", "custom"]).optional(),
+      period: z.string().min(1).max(50).optional(),
       alertsEnabled: z.boolean().optional(),
       alertEmail: z.string().email().optional(),
     })

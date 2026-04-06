@@ -28,12 +28,13 @@ export const createGoalCtrl = asyncHandler(async (req, res) => {
 
 //List all goaadls
 export const listGoalsCtrl = asyncHandler(async (req, res) => {
-  const { page, limit, status, search } = req.validated.query;
+  const { page, limit, status, search, period } = req.validated.query;
   const data = await listGoals({
     userId: req.user.userId,
     page: Number(page),
     limit: Number(limit),
     status: status || null,
+    period: period || null,
     search: search || null,
   });
   sendSuccess(res, {

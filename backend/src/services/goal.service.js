@@ -5,26 +5,21 @@ import { ApiError } from "../utils/ApiError.js";
 import { sendGoalAlertEmail } from "./thirdparty.service.js";
 import { normalizePagination, pagesFromTotal } from "../utils/pagination.js";
 
-export async function createGoal({
-  userId,
-  title,
-  maxKg,
-  startDate,
-  endDate,
-  period,
-  alertsEnabled,
-  alertEmail,
-}) {
+export async function createGoal({ userId, title, maxKg, startDate, endDate, period, alertsEnabled, alertEmail,}) {
   const start = startDate instanceof Date ? startDate : new Date(startDate);
   const end = endDate instanceof Date ? endDate : new Date(endDate);
   if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()))
     throw new ApiError(400, "Invalid startDate/endDate");
   if (end <= start) throw new ApiError(400, "endDate must be after startDate");
 
+  // Default to weekly if period is not explicitly provided
+  const effectivePeriod = period || "weekly";
+
   // Enforce: only one active goal per overlapping period.
   const overlapping = await Goal.findOne({
     userId,
     status: "active",
+    period: effectivePeriod,
     $and: [{ startDate: { $lt: end } }, { endDate: { $gt: start } }],
   });
   if (overlapping) {
@@ -37,15 +32,23 @@ export async function createGoal({
     maxKg,
     startDate: start,
     endDate: end,
-    period,
+    period: effectivePeriod,
     alertsEnabled: alertsEnabled ?? true,
     alertEmail: alertEmail || undefined,
   });
 }
 
-export async function listGoals({ userId, page, limit, status, search }) {
+export async function listGoals({
+  userId,
+  page,
+  limit,
+  status,
+  search,
+  period,
+}) {
   const filter = { userId };
   if (status) filter.status = status;
+   if (period) filter.period = period;
   if (search) filter.title = { $regex: search, $options: "i" };
   const pg = normalizePagination({
     page,

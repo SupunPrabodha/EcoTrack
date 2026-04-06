@@ -42,10 +42,10 @@ const goalSchema = new mongoose.Schema(
       default: "active",
       index: true,
     },
-    period: { 
-      type: String, 
-      enum: ["weekly", "monthly", "custom"], 
-      default: "weekly", 
+    period: {
+      type: String,
+      enum: ["daily", "weekly", "monthly", "custom"],
+      default: "weekly",
     },
     alertsEnabled: {
       type: Boolean,
