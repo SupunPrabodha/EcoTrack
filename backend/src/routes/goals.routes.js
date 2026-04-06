@@ -9,6 +9,7 @@ import {
   getGoalCtrl,
   listGoalsCtrl,
   updateGoalCtrl,
+  goalUsageSummaryCtrl,
 } from "../controllers/goals.controller.js";
 
 /**
@@ -72,12 +73,19 @@ const updateSchema = z.object({
   query: z.object({}),
 });
 
+const usageSummarySchema = z.object({
+  body: z.object({}).optional(),
+  params: z.object({}),
+  query: z.object({}),
+});
+
 router.post("/", validate(createSchema), createGoalCtrl);
 router.get("/", validate(listSchema), listGoalsCtrl);
 router.get("/:id", validate(idSchema), getGoalCtrl);
 router.put("/:id", validate(updateSchema), updateGoalCtrl);
 router.delete("/:id", validate(idSchema), deleteGoalCtrl);
 router.post("/:id/evaluate", validate(idSchema), evaluateGoalCtrl);
+router.get("/usage/external-summary", validate(usageSummarySchema), goalUsageSummaryCtrl);
 
 /**
  * @openapi
@@ -173,6 +181,20 @@ router.post("/:id/evaluate", validate(idSchema), evaluateGoalCtrl);
  *   post:
  *     tags: [Goals]
  *     summary: Evaluate progress against a goal (may trigger email alert)
+ *     security:
+ *       - cookieAuth: []
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: OK
+ */
+
+/**
+ * @openapi
+ * /goals/usage/external-summary:
+ *   get:
+ *     tags: [Goals]
+ *     summary: External CO2 usage summary for yesterday, last 7 days, and last month (Climatiq-powered)
  *     security:
  *       - cookieAuth: []
  *       - bearerAuth: []

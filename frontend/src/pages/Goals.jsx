@@ -1,9 +1,10 @@
 import { useMemo, useState } from "react";
 import Navbar from "../components/Navbar";
 import Card from "../components/Card";
+import Stat from "../components/Stat";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "../api/client";
-import { IconSave, IconTarget, IconWarning } from "../components/Icons";
+import { IconCalendar, IconFlame, IconLeaf, IconSave, IconTarget, IconWarning } from "../components/Icons";
 
 function getDailyRange() {
   const now = new Date();
@@ -48,7 +49,10 @@ function GoalOverviewRow({ period, label }) {
   const currentGoal = items.find((g) => g.period === period) || null;
 
   const evalQ = useQuery({
-    queryKey: ["goal-evaluate", "overview", period, currentGoal?._id],
+    // Share the same key as the main GoalSection evaluation so
+    // React Query deduplicates the POST /goals/:id/evaluate call
+    // and we don't trigger alerts/emails twice.
+    queryKey: ["goal-evaluate", period, currentGoal?._id],
     enabled: !!currentGoal?._id,
     queryFn: async () => (await api.post(`/goals/${currentGoal._id}/evaluate`)).data.data,
   });
@@ -274,18 +278,26 @@ export default function Goals() {
 
   const periodConfig = {
     daily: {
-      title: "Daily CO2 Target",
+      title: "Daily CO₂ Target",
     },
     weekly: {
-      title: "Weekly CO2 Target",
+      title: "Weekly CO₂ Target",
     },
     monthly: {
-      title: "Monthly CO2 Target",
+      title: "Monthly CO₂ Target",
     },
   };
 
   const active = periodConfig[period];
   const activeForm = formState[period];
+
+  const usageSummaryQ = useQuery({
+    queryKey: ["goals-usage-external-summary"],
+    queryFn: async () => (await api.get("/goals/usage/external-summary")).data.data,
+    staleTime: 5 * 60_000,
+    gcTime: 30 * 60_000,
+    refetchOnWindowFocus: false,
+  });
 
   return (
     <div className="min-h-screen">
@@ -301,6 +313,53 @@ export default function Goals() {
             </span>
           </div>
           <div className="text-slate-400 text-sm">Set targets and track your progress</div>
+        </div>
+
+        <div className="grid gap-4 md:grid-cols-3 mt-4">
+          <Stat
+            label="Yesterday CO₂ per person"
+            value={
+              usageSummaryQ.isLoading
+                ? "\u2026"
+                : `${Number(usageSummaryQ.data?.yesterday?.totalKg ?? 0).toFixed(2)} kg`
+            }
+            sub={
+              <span className="inline-flex items-center gap-2">
+                <IconCalendar width={16} height={16} />
+                <span className="text-xs text-slate-400">World Bank global CO2 per-capita data</span>
+              </span>
+            }
+          />
+
+          <Stat
+            label="Last 7 days CO₂ per person"
+            value={
+              usageSummaryQ.isLoading
+                ? "\u2026"
+                : `${Number(usageSummaryQ.data?.last7Days?.totalKg ?? 0).toFixed(2)} kg`
+            }
+            sub={
+              <span className="inline-flex items-center gap-2">
+                <IconLeaf width={16} height={16} />
+                <span className="text-xs text-slate-400">Global average, not your personal footprint</span>
+              </span>
+            }
+          />
+
+          <Stat
+            label="Last month CO₂ per person"
+            value={
+              usageSummaryQ.isLoading
+                ? "\u2026"
+                : `${Number(usageSummaryQ.data?.lastMonth?.totalKg ?? 0).toFixed(2)} kg`
+            }
+            sub={
+              <span className="inline-flex items-center gap-2">
+                <IconFlame width={16} height={16} />
+                <span className="text-xs text-slate-400">Approximate month from yearly per-capita data</span>
+              </span>
+            }
+          />
         </div>
 
         <div className="inline-flex rounded-full bg-slate-900/70 border border-slate-800 p-1 text-xs sm:text-sm">

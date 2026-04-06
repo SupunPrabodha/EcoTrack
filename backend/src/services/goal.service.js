@@ -2,7 +2,7 @@ import { Goal } from "../models/Goal.js";
 import { EmissionEntry } from "../models/EmissionEntry.js";
 import { User } from "../models/User.js";
 import { ApiError } from "../utils/ApiError.js";
-import { sendGoalAlertEmail } from "./thirdparty.service.js";
+import { getGlobalCo2UsageSummary, sendGoalAlertEmail } from "./thirdparty.service.js";
 import { normalizePagination, pagesFromTotal } from "../utils/pagination.js";
 
 export async function createGoal({ userId, title, maxKg, startDate, endDate, period, alertsEnabled, alertEmail,}) {
@@ -108,6 +108,60 @@ export async function updateGoal({ userId, id, patch }) {
 export async function deleteGoal({ userId, id }) {
   const deleted = await Goal.findOneAndDelete({ _id: id, userId });
   if (!deleted) throw new ApiError(404, "Goal not found");
+}
+
+function startOfToday() {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+function cloneDate(d) {
+  return new Date(d.getTime());
+}
+
+export async function getGoalEmissionUsageSummary() {
+  const todayStart = startOfToday();
+
+  const yesterdayEnd = cloneDate(todayStart);
+  const yesterdayStart = cloneDate(todayStart);
+  yesterdayStart.setDate(yesterdayStart.getDate() - 1);
+
+  const last7Start = cloneDate(todayStart);
+  last7Start.setDate(last7Start.getDate() - 7);
+
+  const lastMonthEnd = cloneDate(todayStart);
+  lastMonthEnd.setDate(1);
+  const lastMonthStart = new Date(lastMonthEnd.getFullYear(), lastMonthEnd.getMonth() - 1, 1);
+  lastMonthStart.setHours(0, 0, 0, 0);
+
+  const global = await getGlobalCo2UsageSummary();
+
+  const yesterdayKg = global?.yesterdayPerPersonKg ?? global?.yesterdayKg ?? 0;
+  const last7Kg = global?.last7DaysPerPersonKg ?? global?.last7DaysKg ?? 0;
+  const lastMonthKg = global?.lastMonthPerPersonKg ?? global?.lastMonthKg ?? 0;
+
+  return {
+    yesterday: {
+      from: yesterdayStart,
+      to: yesterdayEnd,
+      totalKg: yesterdayKg,
+      count: null,
+    },
+    last7Days: {
+      from: last7Start,
+      to: todayStart,
+      totalKg: last7Kg,
+      count: null,
+    },
+    lastMonth: {
+      from: lastMonthStart,
+      to: lastMonthEnd,
+      totalKg: lastMonthKg,
+      count: null,
+    },
+    provider: "carbon_intensity_world_model",
+  };
 }
 
 export async function evaluateGoalProgress({ userId, id }) {
