@@ -4,7 +4,7 @@ import Card from "../components/Card";
 import Stat from "../components/Stat";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "../api/client";
-import { IconCalendar, IconFlame, IconLeaf, IconSave, IconTarget, IconWarning } from "../components/Icons";
+import { IconCalendar, IconFlame, IconLeaf, IconSave, IconTarget, IconTrash, IconWarning } from "../components/Icons";
 
 function formatDate(dateStr) {
   if (!dateStr) return "—";
@@ -164,6 +164,14 @@ function GoalSection({
     },
   });
 
+
+  const deleteM = useMutation({
+    mutationFn: async () => api.delete(`/goals/${currentGoal._id}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["goals"] });
+      qc.invalidateQueries({ queryKey: ["goal-evaluate"] });
+    },
+  });
   const progressData = evalQ.data?.progress;
   const currentKg = progressData?.currentKg ?? null;
   const maxKg = progressData?.maxKg ?? null;
@@ -228,9 +236,23 @@ function GoalSection({
 
       <Card title={`${title} Progress`}>
         <div className="space-y-4">
-          <div className="text-sm text-slate-400">
-            Total: {currentKg !== null ? currentKg.toFixed?.(2) ?? currentKg : "—"} kg /
-            Target: {maxKg !== null ? maxKg : "—"} kg
+          <div className="flex items-center justify-between">
+            <div className="text-sm text-slate-400">
+              Total: {currentKg !== null ? currentKg.toFixed?.(2) ?? currentKg : "—"} kg /
+              Target: {maxKg !== null ? maxKg : "—"} kg
+            </div>
+
+            {currentGoal && (
+              <button
+                type="button"
+                onClick={() => deleteM.mutate()}
+                disabled={deleteM.isPending}
+                className="inline-flex items-center gap-1.5 text-xs px-3 py-1 rounded-full border border-slate-700 text-slate-300 hover:border-red-400 hover:text-red-300 hover:bg-red-500/5 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                <IconTrash width={13} height={13} />
+                <span>{deleteM.isPending ? "Removing…" : "Remove goal"}</span>
+              </button>
+            )}
           </div>
 
           <div className="w-full bg-slate-800 rounded-full h-4">
