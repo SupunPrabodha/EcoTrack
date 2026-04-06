@@ -4,7 +4,7 @@ import Card from "../components/Card";
 import Stat from "../components/Stat";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "../api/client";
-import { IconCalendar, IconFlame, IconLeaf, IconSave, IconTarget, IconTrash, IconWarning } from "../components/Icons";
+import { IconCalendar, IconEdit, IconFlame, IconLeaf, IconSave, IconTarget, IconTrash, IconWarning } from "../components/Icons";
 
 function formatDate(dateStr) {
   if (!dateStr) return "—";
@@ -164,6 +164,17 @@ function GoalSection({
     },
   });
 
+  const updateTargetM = useMutation({
+    mutationFn: async (newMaxKg) =>
+      api.put(`/goals/${currentGoal?._id}`, {
+        maxKg: newMaxKg,
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["goals"] });
+      qc.invalidateQueries({ queryKey: ["goal-evaluate"] });
+    },
+  });
+
 
   const deleteM = useMutation({
     mutationFn: async () => api.delete(`/goals/${currentGoal._id}`),
@@ -172,6 +183,8 @@ function GoalSection({
       qc.invalidateQueries({ queryKey: ["goal-evaluate"] });
     },
   });
+  const [isEditingTarget, setIsEditingTarget] = useState(false);
+  const [editTargetValue, setEditTargetValue] = useState("");
   const progressData = evalQ.data?.progress;
   const currentKg = progressData?.currentKg ?? null;
   const maxKg = progressData?.maxKg ?? null;
@@ -199,11 +212,12 @@ function GoalSection({
           />
           <button
             onClick={() => createM.mutate()}
+            disabled={createM.isPending}
             className="px-5 py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-cyan-500 hover:from-emerald-600 hover:to-cyan-600 text-white font-semibold shadow-lg shadow-emerald-500/25 transition-all duration-200"
           >
             <span className="inline-flex items-center gap-2">
               <IconSave width={18} height={18} />
-              Set {period} Target
+              {createM.isPending ? "Saving..." : `Set ${period} Target`}
             </span>
           </button>
         </div>
@@ -237,9 +251,60 @@ function GoalSection({
       <Card title={`${title} Progress`}>
         <div className="space-y-4">
           <div className="flex items-center justify-between">
-            <div className="text-sm text-slate-400">
-              Total: {currentKg !== null ? currentKg.toFixed?.(2) ?? currentKg : "—"} kg /
-              Target: {maxKg !== null ? maxKg : "—"} kg
+            <div className="text-sm text-slate-400 flex items-center gap-2 flex-wrap">
+              <span>
+                Total: {currentKg !== null ? currentKg.toFixed?.(2) ?? currentKg : "—"} kg /
+              </span>
+
+              {!isEditingTarget ? (
+                <span className="inline-flex items-center gap-1">
+                  <span>Target: {maxKg !== null ? maxKg : "—"} kg</span>
+                  {currentGoal && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const initial =
+                          (currentGoal && typeof currentGoal.maxKg === "number"
+                            ? currentGoal.maxKg
+                            : maxKg) ?? 0;
+                        setEditTargetValue(initial ? String(initial) : "");
+                        setIsEditingTarget(true);
+                      }}
+                      className="ml-1 text-[11px] text-slate-500 hover:text-emerald-300 transition-colors"
+                    >
+                      <IconEdit width={13} height={13} />
+                    </button>
+                  )}
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-2">
+                  <span>Target:</span>
+                  <input
+                    type="number"
+                    className="w-20 bg-slate-900/70 border border-emerald-500/40 rounded-md px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                    value={editTargetValue}
+                    onChange={(e) => {
+                      setEditTargetValue(e.target.value);
+                      setTarget(e.target.value);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.currentTarget.blur();
+                      } else if (e.key === "Escape") {
+                        setIsEditingTarget(false);
+                      }
+                    }}
+                    onBlur={() => {
+                      const parsed = Number(editTargetValue);
+                      if (!Number.isNaN(parsed) && currentGoal) {
+                        updateTargetM.mutate(parsed);
+                      }
+                      setIsEditingTarget(false);
+                    }}
+                  />
+                  <span className="text-xs text-slate-400">kg</span>
+                </span>
+              )}
             </div>
 
             {currentGoal && (
