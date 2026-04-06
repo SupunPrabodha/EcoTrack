@@ -8,6 +8,7 @@ import swaggerUi from "swagger-ui-express";
 import { apiLimiter } from "./middlewares/rateLimit.js";
 import { errorHandler, notFound } from "./middlewares/error.js";
 import { swaggerSpec } from "./docs/swagger.js";
+import { env } from "./config/env.js";
 
 import authRoutes from "./routes/auth.routes.js";
 import habitsRoutes from "./routes/habits.routes.js";
@@ -15,9 +16,15 @@ import emissionsRoutes from "./routes/emissions.routes.js";
 import goalsRoutes from "./routes/goals.routes.js";
 import recommendationsRoutes from "./routes/recommendations.routes.js";
 import healthRoutes from "./routes/health.routes.js";
+import adminRoutes from "./routes/admin.routes.js";
+import mapRoutes from "./routes/map.routes.js";
 
 export function createApp() {
   const app = express();
+
+  if (env.TRUST_PROXY) {
+    app.set("trust proxy", 1);
+  }
 
   app.use(helmet());
   app.use(morgan("dev"));
@@ -25,10 +32,51 @@ export function createApp() {
   app.use(cookieParser());
   app.use(apiLimiter);
 
-  app.use(cors({
-    origin: true,
-    credentials: true
-  }));
+  function isOriginAllowed(origin) {
+    if (!origin) return true; // non-browser clients / same-origin
+    const allow = env.CORS_ORIGINS;
+    if (!allow?.length) return true;
+    if (allow.includes("*")) return true;
+    if (allow.includes(origin)) return true;
+
+    let parsed;
+    try {
+      parsed = new URL(origin);
+    } catch {
+      return false;
+    }
+
+    const { protocol, hostname } = parsed;
+
+    return allow.some((entry) => {
+      if (!entry) return false;
+
+      // Host suffix wildcard: "*.vercel.app"
+      if (entry.startsWith("*.")) {
+        const suffix = entry.slice(1); // ".vercel.app"
+        return hostname.endsWith(suffix);
+      }
+
+      // Protocol + host suffix wildcard: "https://*.vercel.app"
+      const m = entry.match(/^(https?:)\/\/\*\.(.+)$/i);
+      if (m) {
+        const expectedProtocol = m[1].toLowerCase();
+        const suffixHost = m[2].toLowerCase();
+        return protocol.toLowerCase() === expectedProtocol && hostname.toLowerCase().endsWith(`.${suffixHost}`);
+      }
+
+      return false;
+    });
+  }
+
+  app.use(
+    cors({
+      origin(origin, cb) {
+        return cb(null, isOriginAllowed(origin));
+      },
+      credentials: true,
+    })
+  );
 
   app.get("/", (req, res) => res.send("EcoTrack API is running"));
   app.use("/api/health", healthRoutes);
@@ -38,6 +86,8 @@ export function createApp() {
   app.use("/api/emissions", emissionsRoutes);
   app.use("/api/goals", goalsRoutes);
   app.use("/api/recommendations", recommendationsRoutes);
+  app.use("/api/admin", adminRoutes);
+  app.use("/api/map", mapRoutes);
 
   app.use("/api/docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
