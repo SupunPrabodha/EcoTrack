@@ -6,6 +6,7 @@ import {
   listRecommendations,
   saveRecommendation,
   updateRecommendation,
+  updateRecommendationFeedback,
 } from "../services/recommendation.service.js";
 import { sendCreated, sendSuccess } from "../utils/response.js";
 
@@ -16,8 +17,8 @@ export const recommendationsGenerateCtrl = asyncHandler(async (req, res) => {
 });
 
 export const recommendationsSaveCtrl = asyncHandler(async (req, res) => {
-  const { title, body, impact, context, evidence } = req.validated.body;
-  const saved = await saveRecommendation({ userId: req.user.userId, title, body, impact, context, evidence });
+  const { ruleId, title, body, impact, context, evidence } = req.validated.body;
+  const saved = await saveRecommendation({ userId: req.user.userId, ruleId, title, body, impact, context, evidence });
   sendCreated(res, { data: saved });
 });
 
@@ -49,4 +50,10 @@ export const recommendationsDeleteCtrl = asyncHandler(async (req, res) => {
   const { id } = req.validated.params;
   await deleteRecommendation({ userId: req.user.userId, id });
   sendSuccess(res, { message: "Recommendation deleted" });
+});
+
+export const recommendationsFeedbackCtrl = asyncHandler(async (req, res) => {
+  const { id } = req.validated.params;
+  const rec = await updateRecommendationFeedback({ userId: req.user.userId, id, feedback: req.validated.body });
+  sendSuccess(res, { data: rec });
 });

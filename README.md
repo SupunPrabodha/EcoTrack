@@ -143,6 +143,16 @@ After login, try these:
   - `GET {{baseUrl}}/recommendations/generate?from=2026-02-01T00:00:00.000Z&to=2026-02-15T23:59:59.999Z`
   - Expected: `200 OK` with a list of generated tips
 
+- Feedback workflow for saved recommendations (mark done / dismiss / rate)
+  1) Save a recommendation you like
+     - `POST {{baseUrl}}/recommendations`
+  2) Update its workflow/feedback
+     - `PATCH {{baseUrl}}/recommendations/:id/feedback`
+     - Body examples (JSON):
+       - Mark as done: `{ "status": "done" }`
+       - Dismiss 7 days: `{ "dismissDays": 7 }`
+       - Rate useful: `{ "rating": "useful" }`
+
 ### 4) Admin-only endpoints
 
 Admin endpoints require a user with role `admin`.
@@ -199,7 +209,23 @@ Admin endpoints require a user with role `admin`.
 - `GET /recommendations` — list saved recommendations (pagination + search + impact filter)
 - `GET /recommendations/:id` — get saved recommendation
 - `PUT /recommendations/:id` — update saved recommendation
+- `PATCH /recommendations/:id/feedback` — update status/dismiss/rating for a saved recommendation
 - `DELETE /recommendations/:id` — delete saved recommendation
+
+## How to Check (Recommendation Upgrades)
+
+Frontend (UI):
+
+- Go to Recommendations → Generate.
+- Tips may show an “Estimated impact” line (kg CO2e) when enough data exists.
+- Save a tip, then in the Saved section use: `Done`, `Dismiss 7d`, `Useful`, `Not useful`.
+- The saved card shows `Status` and (when dismissed) the `dismissedUntil` date.
+
+Backend (API):
+
+- Use Postman:
+  - `GET /recommendations/generate?from=...&to=...`
+  - `PATCH /recommendations/:id/feedback` with the examples above.
 
 ### Admin (`/admin`) (Mixed: bootstrap public, rest admin-only)
 

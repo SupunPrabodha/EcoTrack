@@ -56,6 +56,7 @@ export default function Recommendations() {
   const saveM = useMutation({
     mutationFn: async (tip) =>
       api.post("/recommendations", {
+        ruleId: tip.ruleId,
         title: tip.title,
         body: tip.body,
         impact: tip.impact,
@@ -65,8 +66,10 @@ export default function Recommendations() {
         },
         evidence: {
           why: tip.why || undefined,
+          estimatedKgSaved: typeof tip.estimatedKgSaved === "number" ? tip.estimatedKgSaved : undefined,
           habits: recQ.data?.evidence?.habits || undefined,
           weather: recQ.data?.weather || undefined,
+          goals: recQ.data?.evidence?.goals || undefined,
           range,
         },
       }),
@@ -95,6 +98,11 @@ export default function Recommendations() {
 
   const deleteM = useMutation({
     mutationFn: async (id) => api.delete(`/recommendations/${id}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["recommendations-saved"] }),
+  });
+
+  const feedbackM = useMutation({
+    mutationFn: async ({ id, body }) => api.patch(`/recommendations/${id}/feedback`, body),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["recommendations-saved"] }),
   });
 
@@ -193,6 +201,12 @@ export default function Recommendations() {
         {!recQ.isLoading && recQ.data?.tips?.map((tip, i) => (
           <Card key={i} title={tip.title}>
             <div className="text-slate-300">{tip.body}</div>
+
+            {typeof tip.estimatedKgSaved === "number" && tip.estimatedKgSaved > 0 && (
+              <div className="mt-2 text-xs text-emerald-200">
+                Estimated impact: save ~{tip.estimatedKgSaved} kg CO2e
+              </div>
+            )}
 
             {Array.isArray(tip.why) && tip.why.length > 0 && (
               <div className="mt-3">
@@ -306,6 +320,16 @@ export default function Recommendations() {
               <Card key={r._id} title={r.title}>
                 <div className="text-slate-300">{r.body}</div>
 
+                <div className="mt-2 text-xs text-slate-500">
+                  Status: {r.status || "saved"}
+                  {r.status === "dismissed" && r.dismissedUntil ? (
+                    <span>
+                      {" "}until {new Date(r.dismissedUntil).toLocaleDateString()}
+                    </span>
+                  ) : null}
+                  {r.rating ? <span>{" "}· Rated: {r.rating}</span> : null}
+                </div>
+
                 {(r?.context?.range?.from || r?.context?.weather?.condition) && (
                   <div className="mt-3 text-xs text-slate-500">
                     {r?.context?.range?.from && r?.context?.range?.to ? (
@@ -350,16 +374,50 @@ export default function Recommendations() {
 
                 <div className="mt-3 flex items-center justify-between gap-3">
                   <div className="text-xs text-slate-500">Impact: {r.impact || "—"}</div>
-                  <button
-                    onClick={() => deleteM.mutate(r._id)}
-                    disabled={deleteM.isPending}
-                    className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-red-900 to-red-800 hover:from-red-800 hover:to-red-700 border border-red-700/50 text-red-100 text-sm transition-all disabled:opacity-50"
-                  >
-                    <span className="inline-flex items-center gap-2">
-                      <IconTrash width={16} height={16} />
-                      <span>Delete</span>
-                    </span>
-                  </button>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      onClick={() => feedbackM.mutate({ id: r._id, body: { status: "done" } })}
+                      disabled={feedbackM.isPending}
+                      className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-slate-800 to-slate-700 hover:from-slate-700 hover:to-slate-600 text-sm transition-all disabled:opacity-50"
+                      title="Mark as done"
+                    >
+                      Done
+                    </button>
+                    <button
+                      onClick={() => feedbackM.mutate({ id: r._id, body: { dismissDays: 7 } })}
+                      disabled={feedbackM.isPending}
+                      className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-slate-800 to-slate-700 hover:from-slate-700 hover:to-slate-600 text-sm transition-all disabled:opacity-50"
+                      title="Dismiss for 7 days"
+                    >
+                      Dismiss 7d
+                    </button>
+                    <button
+                      onClick={() => feedbackM.mutate({ id: r._id, body: { rating: "useful" } })}
+                      disabled={feedbackM.isPending}
+                      className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-slate-800 to-slate-700 hover:from-slate-700 hover:to-slate-600 text-sm transition-all disabled:opacity-50"
+                      title="Rate useful"
+                    >
+                      Useful
+                    </button>
+                    <button
+                      onClick={() => feedbackM.mutate({ id: r._id, body: { rating: "not_useful" } })}
+                      disabled={feedbackM.isPending}
+                      className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-slate-800 to-slate-700 hover:from-slate-700 hover:to-slate-600 text-sm transition-all disabled:opacity-50"
+                      title="Rate not useful"
+                    >
+                      Not useful
+                    </button>
+                    <button
+                      onClick={() => deleteM.mutate(r._id)}
+                      disabled={deleteM.isPending}
+                      className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-red-900 to-red-800 hover:from-red-800 hover:to-red-700 border border-red-700/50 text-red-100 text-sm transition-all disabled:opacity-50"
+                    >
+                      <span className="inline-flex items-center gap-2">
+                        <IconTrash width={16} height={16} />
+                        <span>Delete</span>
+                      </span>
+                    </button>
+                  </div>
                 </div>
               </Card>
             ))}
