@@ -170,10 +170,10 @@ function GoalSection({
       )}
 
       <Card title={`${title} (kg)`}>
-        <div className="flex gap-4">
+      <div className="grid grid-cols-[auto_auto] gap-4 items-center">
           <input
             type="number"
-            className="bg-slate-900/50 border border-emerald-500/20 rounded-xl px-4 py-2 focus:border-emerald-500/40 focus:ring-2 focus:ring-emerald-500/20 transition-all"
+          className="bg-slate-900/50 border border-emerald-500/20 rounded-xl px-4 py-2 focus:border-emerald-500/40 focus:ring-2 focus:ring-emerald-500/20 transition-all"
             value={target}
             onChange={(e) => setTarget(e.target.value)}
           />
@@ -183,7 +183,7 @@ function GoalSection({
           >
             <span className="inline-flex items-center gap-2">
               <IconSave width={18} height={18} />
-              Save {period} target
+              Set {period} Target
             </span>
           </button>
         </div>
