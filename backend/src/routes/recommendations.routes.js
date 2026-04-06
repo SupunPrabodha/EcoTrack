@@ -188,7 +188,15 @@ router.delete("/:id", validate(idSchema), recommendationsDeleteCtrl);
  *   get:
  *     tags: [Recommendations]
  *     summary: Download a PDF report of your saved recommendations for a date range
- *     description: Returns a professional PDF report summarizing saved recommendations and feedback in the selected range.
+ *     description: |
+ *       Returns a professional PDF report summarizing your saved recommendations and feedback in the selected range.
+ *
+ *       Report sections (high-level):
+ *       - Report context (date range + generated timestamp)
+ *       - Summary KPIs (counts and basic rates)
+ *       - Recent saved recommendations (sample list)
+ *
+ *       The response is sent as a downloadable attachment (`Content-Disposition: attachment`).
  *     security:
  *       - cookieAuth: []
  *       - bearerAuth: []

@@ -279,7 +279,15 @@ router.get("/reports/recommendations", validate(recommendationsReportSchema), re
  *   get:
  *     tags: [Admin]
  *     summary: Download a PDF report of global recommendation effectiveness (admin only)
- *     description: Returns a professional PDF summarizing recommendation effectiveness by ruleId.
+ *     description: |
+ *       Returns a professional PDF summarizing global recommendation effectiveness by ruleId.
+ *
+ *       Report sections (high-level):
+ *       - Report context (date range + generated timestamp)
+ *       - Summary totals (saved/done/dismissed/useful counts)
+ *       - Effectiveness table by ruleId (rates + averages)
+ *
+ *       The response is sent as a downloadable attachment (`Content-Disposition: attachment`).
  *     security:
  *       - cookieAuth: []
  *       - bearerAuth: []
