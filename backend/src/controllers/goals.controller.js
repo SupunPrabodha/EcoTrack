@@ -6,6 +6,7 @@ import {
   getGoal,
   listGoals,
   updateGoal,
+  getGoalEmissionUsageSummary,
 } from "../services/goal.service.js";
 import { sendCreated, sendSuccess } from "../utils/response.js";
 
@@ -77,5 +78,11 @@ export const deleteGoalCtrl = asyncHandler(async (req, res) => {
 export const evaluateGoalCtrl = asyncHandler(async (req, res) => {
   const { id } = req.validated.params;
   const data = await evaluateGoalProgress({ userId: req.user.userId, id });
+  sendSuccess(res, { data });
+});
+
+// External CO2 usage summary for goals page (Climatiq-powered)
+export const goalUsageSummaryCtrl = asyncHandler(async (req, res) => {
+  const data = await getGoalEmissionUsageSummary({ userId: req.user.userId });
   sendSuccess(res, { data });
 });
