@@ -1,5 +1,5 @@
 import { asyncHandler } from "../utils/asyncHandler.js";
-import { createHabit, listHabits, updateHabit, deleteHabit, getHabit } from "../services/habit.service.js";
+import { createHabit, deleteHabit, getHabit, listHabits, summarizeHabits, updateHabit } from "../services/habit.service.js";
 import { sendCreated, sendSuccess } from "../utils/response.js";
 
 export const createHabitCtrl = asyncHandler(async (req, res) => {
@@ -21,6 +21,17 @@ export const listHabitsCtrl = asyncHandler(async (req, res) => {
     type: type || null
   });
   sendSuccess(res, { data, meta: { page: data.page, limit: data.limit, total: data.total, pages: data.pages } });
+});
+
+export const summarizeHabitsCtrl = asyncHandler(async (req, res) => {
+  const { from, to, type } = req.validated.query;
+  const data = await summarizeHabits({
+    userId: req.user.userId,
+    from: new Date(from),
+    to: new Date(to),
+    type: type || null,
+  });
+  sendSuccess(res, { data });
 });
 
 export const updateHabitCtrl = asyncHandler(async (req, res) => {

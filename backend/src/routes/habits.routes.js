@@ -2,7 +2,14 @@ import { Router } from "express";
 import { z } from "zod";
 import { validate } from "../middlewares/validate.js";
 import { requireAuth } from "../middlewares/auth.js";
-import { createHabitCtrl, deleteHabitCtrl, getHabitCtrl, listHabitsCtrl, updateHabitCtrl } from "../controllers/habits.controller.js";
+import {
+  createHabitCtrl,
+  deleteHabitCtrl,
+  getHabitCtrl,
+  listHabitsCtrl,
+  summarizeHabitsCtrl,
+  updateHabitCtrl,
+} from "../controllers/habits.controller.js";
 import { HABIT_TYPES } from "../utils/constants.js";
 
 /**
@@ -37,6 +44,16 @@ const listSchema = z.object({
     type: z.string().optional()
   })
 });
+
+const summarySchema = z.object({
+  body: z.object({}).optional(),
+  params: z.object({}),
+  query: z.object({
+    from: z.string().datetime(),
+    to: z.string().datetime(),
+    type: z.string().optional(),
+  }),
+});
  
 const idSchema = z.object({
   body: z.object({ value: z.number().min(0) }).optional(),
@@ -45,11 +62,42 @@ const idSchema = z.object({
 });
 
 router.post("/", validate(createSchema), createHabitCtrl);
+
+router.get("/summary", validate(summarySchema), summarizeHabitsCtrl);
 router.get("/", validate(listSchema), listHabitsCtrl);
 router.get("/:id", validate(idSchema), getHabitCtrl);
 router.put("/:id", validate(idSchema), updateHabitCtrl);
 router.patch("/:id", validate(idSchema), updateHabitCtrl);
 router.delete("/:id", validate(idSchema), deleteHabitCtrl);
+
+/**
+ * @openapi
+ * /habits/summary:
+ *   get:
+ *     tags: [Habits]
+ *     summary: Summarize habits grouped by type (totals within a date range)
+ *     security:
+ *       - cookieAuth: []
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: from
+ *         required: true
+ *         example: "2026-02-01T00:00:00.000Z"
+ *       - in: query
+ *         name: to
+ *         required: true
+ *         example: "2026-04-06T23:59:59.000Z"
+ *       - in: query
+ *         name: type
+ *         required: false
+ *         schema:
+ *           type: string
+ *           enum: [car_km, public_transport_km, electricity_kwh, meat_meals, plastic_items]
+ *     responses:
+ *       200:
+ *         description: OK
+ */
 
 /**
  * @openapi
