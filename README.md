@@ -205,6 +205,7 @@ Admin endpoints require a user with role `admin`.
 ### Recommendations (`/recommendations`) (Protected)
 
 - `GET /recommendations/generate?from=...&to=...` — generate recommendations
+- `GET /recommendations/report?from=...&to=...` — download PDF report (saved recommendations + feedback)
 - `POST /recommendations` — save a recommendation
 - `GET /recommendations` — list saved recommendations (pagination + search + impact filter)
 - `GET /recommendations/:id` — get saved recommendation
@@ -256,6 +257,14 @@ Backend (API):
 - `GET /admin/leaderboard/emissions` (Admin) — leaderboard
 - `GET /admin/analytics/goals` (Admin) — goal performance analytics
 - `GET /admin/analytics/recommendations` (Admin) — recommendation effectiveness analytics by ruleId
+- `GET /admin/reports/recommendations` (Admin) — download PDF report (recommendation effectiveness)
+
+## Reports (Professional PDFs)
+
+See [REPORTS.md](REPORTS.md) for:
+
+- User recommendations report PDF
+- Admin recommendation effectiveness report PDF
 
 ### Health (`/health`) (Public)
 

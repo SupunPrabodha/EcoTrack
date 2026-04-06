@@ -16,6 +16,12 @@ afterAll(async () => {
   await teardownTestApp(mongo);
 });
 
+function pdfParser(res, callback) {
+  const chunks = [];
+  res.on("data", (c) => chunks.push(c));
+  res.on("end", () => callback(null, Buffer.concat(chunks)));
+}
+
 function monthString(d) {
   const y = d.getUTCFullYear();
   const m = String(d.getUTCMonth() + 1).padStart(2, "0");
@@ -63,4 +69,71 @@ test("monthly report returns summary + trends", async () => {
   expect(Array.isArray(res.body?.data?.trends)).toBe(true);
   expect(["high", "low"]).toContain(res.body?.data?.level);
   expect(typeof res.body?.data?.feedback).toBe("string");
+});
+
+test("GET /api/recommendations/report returns a PDF attachment", async () => {
+  const from = new Date("2026-02-01T00:00:00.000Z");
+  const to = new Date("2026-02-28T23:59:59.999Z");
+
+  const res = await request(app)
+    .get("/api/recommendations/report")
+    .set("Cookie", cookie)
+    .query({ from: from.toISOString(), to: to.toISOString() })
+    .buffer(true)
+    .parse(pdfParser);
+
+  expect(res.status).toBe(200);
+  expect(String(res.headers["content-type"] || "")).toContain("application/pdf");
+  expect(String(res.headers["content-disposition"] || "")).toContain("attachment");
+  expect(Buffer.isBuffer(res.body)).toBe(true);
+  expect(res.body.length).toBeGreaterThan(100);
+});
+
+test("GET /api/admin/reports/recommendations rejects non-admin", async () => {
+  const res = await request(app)
+    .get("/api/admin/reports/recommendations")
+    .set("Cookie", cookie)
+    .query({ limit: 5 });
+
+  expect(res.status).toBe(403);
+});
+
+test("GET /api/admin/reports/recommendations returns a PDF attachment for admin", async () => {
+  process.env.ALLOW_BOOTSTRAP_ADMIN = "true";
+  process.env.BOOTSTRAP_ADMIN_TOKEN = "bootstrap-test-token";
+
+  const email = "admin_reports@example.com";
+  const password = "Password123!";
+
+  await request(app).post("/api/auth/register").send({
+    name: "Admin Reports",
+    email,
+    password,
+  });
+
+  const boot = await request(app).post("/api/admin/bootstrap").send({
+    email,
+    token: "bootstrap-test-token",
+  });
+  expect(boot.status).toBe(200);
+
+  const login = await request(app).post("/api/auth/login").send({ email, password });
+  const adminCookie = login.headers["set-cookie"];
+  expect(adminCookie).toBeTruthy();
+
+  const res = await request(app)
+    .get("/api/admin/reports/recommendations")
+    .set("Cookie", adminCookie)
+    .query({ limit: 5 })
+    .buffer(true)
+    .parse(pdfParser);
+
+  expect(res.status).toBe(200);
+  expect(String(res.headers["content-type"] || "")).toContain("application/pdf");
+  expect(String(res.headers["content-disposition"] || "")).toContain("attachment");
+  expect(Buffer.isBuffer(res.body)).toBe(true);
+  expect(res.body.length).toBeGreaterThan(100);
+
+  delete process.env.ALLOW_BOOTSTRAP_ADMIN;
+  delete process.env.BOOTSTRAP_ADMIN_TOKEN;
 });

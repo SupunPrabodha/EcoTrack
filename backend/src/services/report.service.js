@@ -2,6 +2,10 @@ import { Goal } from "../models/Goal.js";
 import { getEmissionSummary, getEmissionTrends } from "./emission.service.js";
 import { buildRecommendations } from "./recommendation.service.js";
 import { ApiError } from "../utils/ApiError.js";
+import { Recommendation } from "../models/Recommendation.js";
+import { User } from "../models/User.js";
+import { fmtDate, fmtDateTime, pct, renderPdf } from "../utils/pdf.js";
+import { getGlobalRecommendationAnalytics } from "./admin.service.js";
 
 function parseMonth(month) {
   if (typeof month !== "string") throw new ApiError(400, "month is required");
@@ -169,4 +173,224 @@ export async function getMonthlyReport({ userId, month }) {
       : null,
     recommendations,
   };
+}
+
+function ensureDate(value, name) {
+  const d = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(d.getTime())) throw new ApiError(400, `Invalid ${name}`);
+  return d;
+}
+
+function safeNum(n, digits = 2) {
+  const x = Number(n);
+  if (!Number.isFinite(x)) return 0;
+  const m = 10 ** digits;
+  return Math.round(x * m) / m;
+}
+
+function sectionTitle(doc, text) {
+  doc.moveDown(0.6);
+  doc.fontSize(13).fillColor("#111111").text(text);
+  doc.moveDown(0.2);
+  doc.strokeColor("#dddddd").lineWidth(1).moveTo(doc.x, doc.y).lineTo(545, doc.y).stroke();
+  doc.moveDown(0.4);
+}
+
+function keyValue(doc, k, v) {
+  doc.fontSize(10).fillColor("#444444").text(`${k}: `, { continued: true });
+  doc.fillColor("#111111").text(String(v ?? "—"));
+}
+
+export async function generateUserRecommendationsReportPdf({ userId, from, to }) {
+  const fromD = ensureDate(from, "from");
+  const toD = ensureDate(to, "to");
+  if (toD < fromD) throw new ApiError(400, "Invalid date range: to must be after from");
+
+  const user = await User.findById(userId).select("name email preferences").lean();
+  if (!user) throw new ApiError(404, "User not found");
+
+  const items = await Recommendation.find({
+    userId,
+    saved: true,
+    createdAt: { $gte: fromD, $lte: toD },
+  })
+    .sort({ createdAt: -1 })
+    .limit(100)
+    .lean();
+
+  const totals = {
+    total: items.length,
+    saved: 0,
+    done: 0,
+    dismissed: 0,
+    useful: 0,
+    notUseful: 0,
+    avgEstimatedKgSaved: 0,
+  };
+
+  let sumKg = 0;
+  for (const r of items) {
+    if (r.status === "done") totals.done += 1;
+    else if (r.status === "dismissed") totals.dismissed += 1;
+    else totals.saved += 1;
+
+    if (r.rating === "useful") totals.useful += 1;
+    if (r.rating === "not_useful") totals.notUseful += 1;
+
+    sumKg += Number(r?.evidence?.estimatedKgSaved ?? 0) || 0;
+  }
+  totals.avgEstimatedKgSaved = totals.total ? safeNum(sumKg / totals.total, 2) : 0;
+
+  const feedbackCount = totals.useful + totals.notUseful;
+  const usefulRate = feedbackCount ? totals.useful / feedbackCount : null;
+  const doneRate = totals.total ? totals.done / totals.total : null;
+
+  const top = items.slice(0, 12);
+
+  return renderPdf((doc) => {
+    doc.fontSize(20).fillColor("#111111").text("EcoTrack — Recommendations Report");
+    doc.moveDown(0.2);
+    doc.fontSize(10).fillColor("#666666").text(`Generated: ${fmtDateTime(new Date())}`);
+
+    sectionTitle(doc, "Report context");
+    keyValue(doc, "User", `${user.name} <${user.email}>`);
+    keyValue(doc, "Range", `${fmtDate(fromD)} → ${fmtDate(toD)}`);
+
+    const diet = user?.preferences?.diet;
+    const transport = user?.preferences?.transportMode;
+    const excluded = user?.preferences?.recommendations?.excludedRuleIds;
+
+    doc.moveDown(0.2);
+    keyValue(doc, "Diet preference", diet || "—");
+    keyValue(doc, "Transport mode", transport || "—");
+    keyValue(doc, "Excluded ruleIds", Array.isArray(excluded) && excluded.length ? excluded.join(", ") : "—");
+
+    sectionTitle(doc, "Summary");
+    keyValue(doc, "Saved recommendations", totals.total);
+    keyValue(doc, "Done", totals.done);
+    keyValue(doc, "Dismissed", totals.dismissed);
+    keyValue(doc, "Useful feedback", totals.useful);
+    keyValue(doc, "Not useful feedback", totals.notUseful);
+    keyValue(doc, "Useful rate", pct(usefulRate));
+    keyValue(doc, "Done rate", pct(doneRate));
+    keyValue(doc, "Avg estimated kg saved", `${totals.avgEstimatedKgSaved} kg CO2e`);
+
+    sectionTitle(doc, "Most recent saved recommendations");
+    doc.fontSize(9).fillColor("#111111");
+
+    const startX = doc.x;
+    let y = doc.y;
+
+    const cols = {
+      rule: startX,
+      status: startX + 110,
+      rating: startX + 180,
+      kg: startX + 260,
+      date: startX + 330,
+    };
+
+    doc.fillColor("#666666");
+    doc.text("Rule", cols.rule, y);
+    doc.text("Status", cols.status, y);
+    doc.text("Rating", cols.rating, y);
+    doc.text("kg saved", cols.kg, y);
+    doc.text("Created", cols.date, y);
+    y += 14;
+
+    doc.fillColor("#111111");
+    for (const r of top) {
+      if (y > 760) {
+        doc.addPage();
+        y = doc.y;
+      }
+      doc.text(r.ruleId || "unknown", cols.rule, y, { width: 105 });
+      doc.text(r.status || "saved", cols.status, y, { width: 65 });
+      doc.text(r.rating || "—", cols.rating, y, { width: 70 });
+      doc.text(String(safeNum(r?.evidence?.estimatedKgSaved ?? 0, 2)), cols.kg, y, { width: 60 });
+      doc.text(fmtDate(r.createdAt), cols.date, y, { width: 160 });
+      y += 13;
+    }
+
+    doc.moveDown(0.8);
+    doc.fontSize(8).fillColor("#666666").text(
+      "Notes: This report summarizes saved recommendations and user feedback within the selected range. Estimated impact values are approximations.",
+      { align: "left" }
+    );
+  });
+}
+
+export async function generateAdminRecommendationsReportPdf({ from, to, limit = 20 }) {
+  const fromD = from ? ensureDate(from, "from") : null;
+  const toD = to ? ensureDate(to, "to") : null;
+  if (fromD && toD && toD < fromD) throw new ApiError(400, "Invalid date range: to must be after from");
+
+  const analytics = await getGlobalRecommendationAnalytics({ from: fromD, to: toD, limit });
+
+  return renderPdf((doc) => {
+    doc.fontSize(20).fillColor("#111111").text("EcoTrack — Admin Recommendation Effectiveness Report");
+    doc.moveDown(0.2);
+    doc.fontSize(10).fillColor("#666666").text(`Generated: ${fmtDateTime(new Date())}`);
+
+    sectionTitle(doc, "Report scope");
+    keyValue(
+      doc,
+      "Range",
+      `${analytics.range.from ? fmtDate(analytics.range.from) : "—"} → ${analytics.range.to ? fmtDate(analytics.range.to) : "—"}`
+    );
+    keyValue(doc, "Top rules limit", analytics.limit);
+
+    sectionTitle(doc, "Global summary");
+    keyValue(doc, "Saved recommendations", analytics.summary.total);
+    keyValue(doc, "Distinct users", analytics.summary.users);
+    keyValue(doc, "Done", analytics.summary.done);
+    keyValue(doc, "Dismissed", analytics.summary.dismissed);
+    keyValue(doc, "Useful feedback", analytics.summary.useful);
+    keyValue(doc, "Not useful feedback", analytics.summary.notUseful);
+    keyValue(doc, "Avg estimated kg saved", `${safeNum(analytics.summary.avgEstimatedKgSaved ?? 0, 2)} kg CO2e`);
+
+    sectionTitle(doc, "Effectiveness by ruleId (top rules)");
+
+    const rows = analytics.byRule || [];
+    const startX = doc.x;
+    let y = doc.y;
+
+    const cols = {
+      rule: startX,
+      total: startX + 140,
+      useful: startX + 190,
+      done: startX + 260,
+      dismiss: startX + 330,
+      kg: startX + 420,
+    };
+
+    doc.fontSize(9).fillColor("#666666");
+    doc.text("Rule", cols.rule, y);
+    doc.text("Total", cols.total, y);
+    doc.text("Useful%", cols.useful, y);
+    doc.text("Done%", cols.done, y);
+    doc.text("Dismiss%", cols.dismiss, y);
+    doc.text("Avg kg", cols.kg, y);
+    y += 14;
+
+    doc.fillColor("#111111");
+    for (const r of rows) {
+      if (y > 760) {
+        doc.addPage();
+        y = doc.y;
+      }
+      doc.text(r.ruleId, cols.rule, y, { width: 135 });
+      doc.text(String(r.total ?? 0), cols.total, y);
+      doc.text(pct(r.usefulRate), cols.useful, y);
+      doc.text(pct(r.doneRate), cols.done, y);
+      doc.text(pct(r.dismissRate), cols.dismiss, y);
+      doc.text(String(safeNum(r.avgEstimatedKgSaved ?? 0, 2)), cols.kg, y);
+      y += 13;
+    }
+
+    doc.moveDown(0.8);
+    doc.fontSize(8).fillColor("#666666").text(
+      "Notes: Useful rate is computed from feedback only (useful vs not_useful). Done/dismiss rates are computed over all saved recommendations. Use this report to validate real-world impact and iterate recommendation rules.",
+      { align: "left" }
+    );
+  });
 }
