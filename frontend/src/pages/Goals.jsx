@@ -4,7 +4,24 @@ import Card from "../components/Card";
 import Stat from "../components/Stat";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "../api/client";
-import { IconCalendar, IconFlame, IconLeaf, IconSave, IconTarget, IconWarning } from "../components/Icons";
+import { IconCalendar, IconFlame, IconLeaf, IconSave, IconTarget, IconTrash, IconWarning } from "../components/Icons";
+
+function formatDate(dateStr) {
+  if (!dateStr) return "—";
+  const d = new Date(dateStr);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toLocaleDateString(undefined, {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+function formatDateRange(start, end) {
+  if (!start || !end) return "—";
+  return `${formatDate(start)} 
+  – ${formatDate(end)}`;
+}
 
 function getDailyRange() {
   const now = new Date();
@@ -49,9 +66,6 @@ function GoalOverviewRow({ period, label }) {
   const currentGoal = items.find((g) => g.period === period) || null;
 
   const evalQ = useQuery({
-    // Share the same key as the main GoalSection evaluation so
-    // React Query deduplicates the POST /goals/:id/evaluate call
-    // and we don't trigger alerts/emails twice.
     queryKey: ["goal-evaluate", period, currentGoal?._id],
     enabled: !!currentGoal?._id,
     queryFn: async () => (await api.post(`/goals/${currentGoal._id}/evaluate`)).data.data,
@@ -146,12 +160,18 @@ function GoalSection({
         ...(alertsEnabled && alertEmail ? { alertEmail } : {}),
       }),
     onSuccess: () => {
-      // Invalidate all goal-related queries so both the main section
-      // and the right-side overview stay in sync.
       qc.invalidateQueries({ queryKey: ["goals"] });
     },
   });
 
+
+  const deleteM = useMutation({
+    mutationFn: async () => api.delete(`/goals/${currentGoal._id}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["goals"] });
+      qc.invalidateQueries({ queryKey: ["goal-evaluate"] });
+    },
+  });
   const progressData = evalQ.data?.progress;
   const currentKg = progressData?.currentKg ?? null;
   const maxKg = progressData?.maxKg ?? null;
@@ -170,10 +190,10 @@ function GoalSection({
       )}
 
       <Card title={`${title} (kg)`}>
-        <div className="flex gap-4">
+      <div className="grid grid-cols-[auto_auto] gap-4 items-center">
           <input
             type="number"
-            className="bg-slate-900/50 border border-emerald-500/20 rounded-xl px-4 py-2 focus:border-emerald-500/40 focus:ring-2 focus:ring-emerald-500/20 transition-all"
+          className="bg-slate-900/50 border border-emerald-500/20 rounded-xl px-4 py-2 focus:border-emerald-500/40 focus:ring-2 focus:ring-emerald-500/20 transition-all"
             value={target}
             onChange={(e) => setTarget(e.target.value)}
           />
@@ -183,7 +203,7 @@ function GoalSection({
           >
             <span className="inline-flex items-center gap-2">
               <IconSave width={18} height={18} />
-              Save {period} target
+              Set {period} Target
             </span>
           </button>
         </div>
@@ -216,9 +236,23 @@ function GoalSection({
 
       <Card title={`${title} Progress`}>
         <div className="space-y-4">
-          <div className="text-sm text-slate-400">
-            Total: {currentKg !== null ? currentKg.toFixed?.(2) ?? currentKg : "—"} kg /
-            Target: {maxKg !== null ? maxKg : "—"} kg
+          <div className="flex items-center justify-between">
+            <div className="text-sm text-slate-400">
+              Total: {currentKg !== null ? currentKg.toFixed?.(2) ?? currentKg : "—"} kg /
+              Target: {maxKg !== null ? maxKg : "—"} kg
+            </div>
+
+            {currentGoal && (
+              <button
+                type="button"
+                onClick={() => deleteM.mutate()}
+                disabled={deleteM.isPending}
+                className="inline-flex items-center gap-1.5 text-xs px-3 py-1 rounded-full border border-slate-700 text-slate-300 hover:border-red-400 hover:text-red-300 hover:bg-red-500/5 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                <IconTrash width={13} height={13} />
+                <span>{deleteM.isPending ? "Removing…" : "Remove goal"}</span>
+              </button>
+            )}
           </div>
 
           <div className="w-full bg-slate-800 rounded-full h-4">
@@ -263,6 +297,66 @@ function GoalSection({
           )}
         </div>
       </Card>
+    </div>
+  );
+}
+
+function CompletedGoalsList() {
+  const completedQ = useQuery({
+    queryKey: ["goals", "completed"],
+    queryFn: async () =>
+      (
+        await api.get("/goals", {
+          params: { page: 1, limit: 20 },
+        })
+      ).data.data,
+  });
+
+  const items = (completedQ.data?.items || []).filter(
+    (g) => g.status === "achieved" || g.status === "failed"
+  );
+
+  return (
+    <div className="space-y-2 text-xs sm:text-sm">
+      <div className="flex items-center justify-between">
+        {completedQ.isLoading && <span className="text-slate-500">Loading…</span>}
+      </div>
+
+      {!completedQ.isLoading && items.length === 0 && (
+        <div className="text-slate-500">No completed goals yet.</div>
+      )}
+
+      {items.length > 0 && (
+        <ul className="space-y-1 max-h-40 overflow-y-auto pr-1">
+          {items.map((goal) => (
+            <li
+              key={goal._id}
+              className="flex items-center justify-between rounded-lg bg-slate-900/60 border border-slate-800 px-3 py-2"
+            >
+              <div className="flex flex-col">
+                <span className="text-slate-200 text-xs sm:text-sm truncate max-w-[10rem] sm:max-w-[14rem]">
+                  {goal.title}
+                </span>
+                <span className="text-[11px] text-slate-500">
+                  Target ≤ {goal.maxKg} kg · {goal.period}
+                </span>
+                <span className="text-[11px] text-slate-500">
+                  {formatDateRange(goal.startDate, goal.endDate)}
+                </span>
+              </div>
+              <span
+                className={`text-[11px] px-2 py-0.5 rounded-full border  ${
+                  goal.status === "achieved"
+                    ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
+                    : "bg-red-500/10 text-red-300 border-red-500/30"
+                }`}
+              >
+                {goal.status === "achieved" ? "Achieved" : "Failed"}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }
@@ -326,7 +420,7 @@ export default function Goals() {
             sub={
               <span className="inline-flex items-center gap-2">
                 <IconCalendar width={16} height={16} />
-                <span className="text-xs text-slate-400">World Bank global CO2 per-capita data</span>
+                <span className="text-xs text-slate-400">World Bank global CO₂ per-capita data</span>
               </span>
             }
           />
@@ -415,6 +509,10 @@ export default function Goals() {
             </div>
           </Card>
         </div>
+
+        <Card title="Completed goals">
+          <CompletedGoalsList />
+        </Card>
       </div>
     </div>
   );
