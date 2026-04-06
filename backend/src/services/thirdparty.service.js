@@ -345,7 +345,10 @@ export async function sendGoalAlertEmail({ to, subject, text }) {
       );
       return { sent: true, provider: "brevo" };
     } catch (err) {
-      return { sent: false, reason: "brevo_failed", provider: "brevo", error: safeJsonError(err) };
+      const error = safeJsonError(err);
+      // Log server-side so you can see why Brevo rejected the request
+      console.error("Brevo email failed", error);
+      return { sent: false, reason: "brevo_failed", provider: "brevo", error };
     }
   }
 
