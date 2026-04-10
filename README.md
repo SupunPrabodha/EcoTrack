@@ -81,6 +81,36 @@ Authentication:
 
 Base URL (local): `http://localhost:5000/api`
 
+## Rubric Evidence Docs
+
+- Recommendations mapping: `RECOMMENDATIONS_RUBRIC.md`
+- Reports (PDF): `REPORTS.md`
+- Map feature summary: `MAP_FEATURE.md`
+- Map testing walkthrough: `MAP_TESTING.md`
+
+## Testing & Performance
+
+Backend (Jest + Supertest):
+
+```bash
+cd backend
+pnpm test
+```
+
+Frontend (Vitest):
+
+```bash
+cd frontend
+pnpm test:run
+```
+
+Performance (Artillery):
+
+```bash
+cd backend
+pnpm perf
+```
+
 ## Postman Guide (Optional)
 
 You can test the API using Postman (recommended for viva demos).
