@@ -9,6 +9,7 @@ const cache = {
   gridIntensity: new Map(), // key: regionId string => { value, expiresAt }
   airPollution: new Map(), // key: "lat,lon" => { value, expiresAt }
   nearby: new Map(), // key: "lat,lon,cnt" => { value, expiresAt }
+  worldCo2PerCapita: { value: null, expiresAt: 0 },
 };
 
 function httpClient(baseURL) {
@@ -31,6 +32,7 @@ function safeJsonError(err) {
 const openWeather = httpClient("https://api.openweathermap.org");
 const carbonIntensity = httpClient(env.CARBON_INTENSITY_BASE_URL);
 const climatiq = httpClient(env.CLIMATIQ_BASE_URL);
+const worldBank = httpClient("https://api.worldbank.org/v2");
 
 const IS_TEST = env.NODE_ENV === "test";
 
@@ -252,6 +254,81 @@ export async function getGridCarbonIntensity({ region } = {}) {
     return null;
   }
 }
+// World Bank: CO2 emissions (metric tons per capita), world aggregate.
+// Indicator: EN.ATM.CO2E.PC, country code: WLD.
+async function getWorldBankGlobalCo2PerCapitaTonsPerYear() {
+  const now = Date.now();
+  if (cache.worldCo2PerCapita.expiresAt > now && cache.worldCo2PerCapita.value !== null) {
+    return cache.worldCo2PerCapita.value;
+  }
+
+  try {
+    const { data } = await worldBank.get("/country/WLD/indicator/EN.ATM.CO2E.PC", {
+      params: { format: "json", per_page: 60 },
+    });
+
+    const rows = Array.isArray(data?.[1]) ? data[1] : [];
+    const validRows = rows
+      .filter((r) => r && r.value != null)
+      .sort((a, b) => Number(b.date) - Number(a.date));
+
+    const latest = validRows[0];
+    const tonsPerCapitaYear = typeof latest?.value === "number" ? latest.value : null;
+
+    cache.worldCo2PerCapita = {
+      value: tonsPerCapitaYear,
+      // Cache for 24 hours; dataset updates yearly so this is safe.
+      expiresAt: now + 24 * 60 * 60 * 1000,
+    };
+
+    return tonsPerCapitaYear;
+  } catch (err) {
+    console.error("World Bank CO2 per capita fetch failed", safeJsonError(err));
+    cache.worldCo2PerCapita = { value: null, expiresAt: now + TTL_NEGATIVE };
+    return null;
+  }
+}
+
+// Global CO2 usage summary based on World Bank per-capita dataset.
+export async function getGlobalCo2UsageSummary() {
+  let tonsPerCapitaYear = await getWorldBankGlobalCo2PerCapitaTonsPerYear();
+
+  // Fallback: use a reasonable recent global average from the same
+  // World Bank dataset (around 4.6 tCO2/person/year) when the live
+  // API is unavailable or returns no numeric value.
+  const FALLBACK_TONS_PER_CAPITA_YEAR = 4.6;
+  let usedFallback = false;
+
+  if (typeof tonsPerCapitaYear !== "number" || !Number.isFinite(tonsPerCapitaYear)) {
+    tonsPerCapitaYear = FALLBACK_TONS_PER_CAPITA_YEAR;
+    usedFallback = true;
+  }
+
+  const kgPerCapitaYear = tonsPerCapitaYear * 1000;
+  const kgPerCapitaDay = kgPerCapitaYear / 365;
+
+  const yesterdayPerPersonKg = kgPerCapitaDay;
+  const last7DaysPerPersonKg = kgPerCapitaDay * 7;
+  const lastMonthPerPersonKg = kgPerCapitaDay * 30;
+
+  // Approximate world population to derive totals (optional info only).
+  const WORLD_POPULATION_SAMPLE = 8_000_000_000;
+  const yesterdayKg = yesterdayPerPersonKg * WORLD_POPULATION_SAMPLE;
+  const last7DaysKg = last7DaysPerPersonKg * WORLD_POPULATION_SAMPLE;
+  const lastMonthKg = lastMonthPerPersonKg * WORLD_POPULATION_SAMPLE;
+
+  return {
+    yesterdayKg,
+    last7DaysKg,
+    lastMonthKg,
+    yesterdayPerPersonKg,
+    last7DaysPerPersonKg,
+    lastMonthPerPersonKg,
+    source: usedFallback
+      ? "world_bank_EN.ATM.CO2E.PC_fallback_4.6t_per_capita_year"
+      : "world_bank_EN.ATM.CO2E.PC",
+  };
+}
 
 
 // Climatiq estimates (best-effort): returns kgCO2e for supported habit types.
@@ -345,7 +422,10 @@ export async function sendGoalAlertEmail({ to, subject, text }) {
       );
       return { sent: true, provider: "brevo" };
     } catch (err) {
-      return { sent: false, reason: "brevo_failed", provider: "brevo", error: safeJsonError(err) };
+      const error = safeJsonError(err);
+      // Log server-side so you can see why Brevo rejected the request
+      console.error("Brevo email failed", error);
+      return { sent: false, reason: "brevo_failed", provider: "brevo", error };
     }
   }
 
