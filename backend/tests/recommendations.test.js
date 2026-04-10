@@ -403,3 +403,75 @@ test("Generator respects preferences: excludedRuleIds suppresses specific ruleId
   const tips = res.body?.data?.tips || [];
   expect(tips.some((t) => t.ruleId === "car_reduce")).toBe(false);
 });
+
+test("GET /api/recommendations/:id returns the saved recommendation and enforces ownership", async () => {
+  const saved = await Recommendation.create({
+    userId,
+    ruleId: "car_reduce",
+    title: "Get rec",
+    body: "Test body for get endpoint.",
+    impact: "Low",
+    saved: true,
+    evidence: { why: ["x"] },
+  });
+
+  const ok = await request(app).get(`/api/recommendations/${saved._id}`).set("Cookie", cookie);
+  expect(ok.status).toBe(200);
+  expect(String(ok.body?.data?._id)).toBe(String(saved._id));
+  expect(ok.body?.data?.title).toBe("Get rec");
+
+  const other = await request(app).get(`/api/recommendations/${saved._id}`).set("Cookie", otherCookie);
+  expect(other.status).toBe(404);
+});
+
+test("PUT /api/recommendations/:id updates fields and rejects empty bodies", async () => {
+  const saved = await Recommendation.create({
+    userId,
+    ruleId: "electricity_reduce",
+    title: "Before update",
+    body: "Before update body.",
+    impact: "Medium",
+    saved: true,
+    evidence: { why: ["x"] },
+  });
+
+  const bad = await request(app)
+    .put(`/api/recommendations/${saved._id}`)
+    .set("Cookie", cookie)
+    .send({});
+  expect(bad.status).toBe(400);
+
+  const ok = await request(app)
+    .put(`/api/recommendations/${saved._id}`)
+    .set("Cookie", cookie)
+    .send({ title: "After update", impact: "High" });
+  expect(ok.status).toBe(200);
+  expect(ok.body?.data?.title).toBe("After update");
+  expect(ok.body?.data?.impact).toBe("High");
+
+  const other = await request(app)
+    .put(`/api/recommendations/${saved._id}`)
+    .set("Cookie", otherCookie)
+    .send({ title: "Hacked" });
+  expect(other.status).toBe(404);
+});
+
+test("DELETE /api/recommendations/:id deletes and enforces ownership", async () => {
+  const saved = await Recommendation.create({
+    userId,
+    title: "Delete rec",
+    body: "Test body for delete endpoint.",
+    impact: "Low",
+    saved: true,
+    evidence: { why: ["x"] },
+  });
+
+  const other = await request(app).delete(`/api/recommendations/${saved._id}`).set("Cookie", otherCookie);
+  expect(other.status).toBe(404);
+
+  const ok = await request(app).delete(`/api/recommendations/${saved._id}`).set("Cookie", cookie);
+  expect(ok.status).toBe(200);
+
+  const gone = await Recommendation.findById(saved._id).lean();
+  expect(gone).toBeNull();
+});
