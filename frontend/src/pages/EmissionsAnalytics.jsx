@@ -4,6 +4,7 @@ import Navbar from "../components/Navbar";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../api/client";
 import EmissionsLineChart from "../components/EmissionsLineChart";
+import EmissionsHeatmap from "../components/EmissionsHeatmap";
 
 export default function EmissionsAnalytics() {
   // Fetch summary breakdown (same as Dashboard)
@@ -28,6 +29,9 @@ export default function EmissionsAnalytics() {
             <EmissionsPieChart data={breakdown} title="Emissions by Category" />
           </Card>
           <EmissionsLineChart />
+        </div>
+        <div className="mt-8">
+          <EmissionsHeatmap />
         </div>
       </div>
     </div>
