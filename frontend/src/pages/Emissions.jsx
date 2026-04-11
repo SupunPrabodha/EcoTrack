@@ -4,6 +4,7 @@ import Card from "../components/Card";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../api/client";
 import { IconDocument, IconEdit, IconRefresh, IconSave, IconSparkles, IconTrash, IconWarning } from "../components/Icons";
+import { useNavigate } from "react-router-dom";
 
 function pad2(n) {
   return String(n).padStart(2, "0");
@@ -167,20 +168,26 @@ export default function Emissions() {
     });
   };
 
+  const navigate = useNavigate();
+
   return (
     <div className="min-h-screen">
       <Navbar />
       <div className="max-w-7xl mx-auto px-4 py-8 grid gap-5">
         <div>
-          <div className="text-3xl font-bold bg-gradient-to-r from-emerald-400 to-cyan-400 bg-clip-text text-transparent mb-2">
+          <div className="text-3xl font-bold bg-gradient-to-r from-emerald-400 to-cyan-400 bg-clip-text text-transparent">
             <span className="inline-flex items-center gap-2">
-              <IconDocument width={24} height={24} />
               <span>Manual Emissions</span>
             </span>
           </div>
           <div className="text-slate-400 text-sm">Track and manage custom emission entries</div>
         </div>
-
+        <button
+          className="ml-auto px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-cyan-500 hover:from-emerald-600 hover:to-cyan-600 text-white font-semibold shadow-lg shadow-emerald-500/25 transition-all"
+          onClick={() => navigate("/emissions/analytics")}
+        >
+          Go to Analytics
+        </button>
         <Card title="Filters">
           <div className="grid md:grid-cols-5 gap-3">
             <div>
@@ -239,7 +246,7 @@ export default function Emissions() {
             </div>
             <div className="flex items-end gap-2">
               <button
-                className="flex-1 rounded-xl bg-gradient-to-r from-slate-800 to-slate-700 hover:from-slate-700 hover:to-slate-600 text-sm py-2 transition-all"
+                className="flex-1 rounded-xl bg-linear-to-r from-slate-800 to-slate-700 hover:from-slate-700 hover:to-slate-600 text-sm py-2 transition-all"
                 onClick={() => {
                   setFromDate(() => {
                     const d = new Date();
@@ -351,7 +358,7 @@ export default function Emissions() {
             <button
               onClick={() => createM.mutate()}
               disabled={createM.isPending || (mode === "direct" && emissionKg === "")}
-              className="rounded-xl bg-gradient-to-r from-emerald-500 to-cyan-500 hover:from-emerald-600 hover:to-cyan-600 text-white font-semibold py-2 px-5 shadow-lg shadow-emerald-500/25 transition-all duration-200 disabled:opacity-50"
+              className="rounded-xl bg-linear-to-r from-emerald-500 to-cyan-500 hover:from-emerald-600 hover:to-cyan-600 text-white font-semibold py-2 px-5 shadow-lg shadow-emerald-500/25 transition-all duration-200 disabled:opacity-50"
             >
               <span className="inline-flex items-center gap-2">
                 {createM.isPending ? <IconRefresh width={18} height={18} className="animate-spin" /> : <IconSparkles width={18} height={18} />}
@@ -404,7 +411,7 @@ export default function Emissions() {
                       </div>
                       <div className="mt-2 flex gap-2 justify-end">
                         <button
-                          className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-slate-800 to-slate-700 hover:from-slate-700 hover:to-slate-600 text-sm transition-all"
+                          className="px-3 py-1.5 rounded-xl bg-linear-to-r from-slate-800 to-slate-700 hover:from-slate-700 hover:to-slate-600 text-sm transition-all"
                           onClick={() => startEdit(e)}
                         >
                           <span className="inline-flex items-center gap-2">
@@ -413,7 +420,7 @@ export default function Emissions() {
                           </span>
                         </button>
                         <button
-                          className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-red-900 to-red-800 hover:from-red-800 hover:to-red-700 border border-red-700/50 text-red-100 text-sm transition-all disabled:opacity-50"
+                          className="px-3 py-1.5 rounded-xl bg-linear-to-r from-red-900 to-red-800 hover:from-red-800 hover:to-red-700 border border-red-700/50 text-red-100 text-sm transition-all disabled:opacity-50"
                           disabled={deleteM.isPending}
                           onClick={() => deleteM.mutate(e._id)}
                         >
@@ -500,7 +507,7 @@ export default function Emissions() {
 
                       <div className="flex gap-2">
                         <button
-                          className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-emerald-500 to-cyan-500 hover:from-emerald-600 hover:to-cyan-600 text-white font-semibold text-sm shadow-lg shadow-emerald-500/25 transition-all duration-200 disabled:opacity-50"
+                          className="px-3 py-1.5 rounded-xl bg-linear-to-r from-emerald-500 to-cyan-500 hover:from-emerald-600 hover:to-cyan-600 text-white font-semibold text-sm shadow-lg shadow-emerald-500/25 transition-all duration-200 disabled:opacity-50"
                           disabled={updateM.isPending}
                           onClick={() => updateM.mutate()}
                         >
@@ -510,7 +517,7 @@ export default function Emissions() {
                           </span>
                         </button>
                         <button
-                          className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-slate-800 to-slate-700 hover:from-slate-700 hover:to-slate-600 text-sm transition-all"
+                          className="px-3 py-1.5 rounded-xl bg-linear-to-r from-slate-800 to-slate-700 hover:from-slate-700 hover:to-slate-600 text-sm transition-all"
                           onClick={() => setEditingId(null)}
                         >
                           Cancel
@@ -534,14 +541,14 @@ export default function Emissions() {
               </div>
               <div className="flex gap-2">
                 <button
-                  className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-slate-800 to-slate-700 hover:from-slate-700 hover:to-slate-600 text-sm transition-all disabled:opacity-50"
+                  className="px-3 py-1.5 rounded-xl bg-linear-to-r from-slate-800 to-slate-700 hover:from-slate-700 hover:to-slate-600 text-sm transition-all disabled:opacity-50"
                   disabled={page <= 1}
                   onClick={() => setPage((p) => Math.max(1, p - 1))}
                 >
                   Prev
                 </button>
                 <button
-                  className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-slate-800 to-slate-700 hover:from-slate-700 hover:to-slate-600 text-sm transition-all disabled:opacity-50"
+                  className="px-3 py-1.5 rounded-xl bg-linear-to-r from-slate-800 to-slate-700 hover:from-slate-700 hover:to-slate-600 text-sm transition-all disabled:opacity-50"
                   disabled={page >= (listQ.data?.meta?.pages ?? 1)}
                   onClick={() => setPage((p) => p + 1)}
                 >
