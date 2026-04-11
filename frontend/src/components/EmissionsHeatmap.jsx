@@ -1,12 +1,14 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import CalendarHeatmap from "react-calendar-heatmap";
 import "react-calendar-heatmap/dist/styles.css";
 import Card from "./Card";
+import YearSelector from "./YearSelector";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../api/client";
 
-function getDateNDaysAgo(n) {
-  const d = new Date();
+
+function getDateNDaysAgo(n, baseDate = new Date()) {
+  const d = new Date(baseDate);
   d.setDate(d.getDate() - n);
   d.setHours(0, 0, 0, 0);
   return d;
@@ -18,10 +20,26 @@ function getTodayEndISO() {
   return d.toISOString();
 }
 
+
 export default function EmissionsHeatmap() {
-  // Fetch all emission trends for the past year
-  const from = getDateNDaysAgo(364).toISOString();
-  const to = getTodayEndISO();
+  // Year selector logic
+  const currentYear = new Date().getFullYear();
+  const years = [currentYear, currentYear - 1, currentYear - 2];
+  const [selectedYear, setSelectedYear] = useState(currentYear);
+
+
+  // Calculate start and end of selected year, adjusted to full weeks (Sunday to Saturday)
+  const rawYearStart = new Date(selectedYear, 0, 1);
+  const rawYearEnd = new Date(selectedYear, 11, 31, 23, 59, 59, 999);
+  // Find previous Sunday (or same day if already Sunday)
+  const yearStart = new Date(rawYearStart);
+  yearStart.setDate(yearStart.getDate() - yearStart.getDay());
+  // Find next Saturday (or same day if already Saturday)
+  const yearEnd = new Date(rawYearEnd);
+  yearEnd.setDate(yearEnd.getDate() + (6 - yearEnd.getDay()));
+  const from = rawYearStart.toISOString();
+  const to = rawYearEnd.toISOString();
+
   const trendsQ = useQuery({
     queryKey: ["trends", { from, to }],
     queryFn: async () => (await api.get("/emissions/trends", { params: { from, to } })).data.data,
@@ -78,17 +96,22 @@ export default function EmissionsHeatmap() {
 
   return (
     <Card title="Emissions Heatmap (Calendar)">
-      <div className="overflow-x-auto">
-        <CalendarHeatmap
-          startDate={getDateNDaysAgo(364)}
-          endDate={new Date()}
-          values={values}
-          classForValue={classForValue}
-          showWeekdayLabels={true}
-          tooltipDataAttrs={value => ({
-            'data-tip': value.date ? `${value.date}: ${value.count} kg CO₂` : "No data"
-          })}
-        />
+      <div className="flex flex-row gap-8">
+        <div className="flex-1 overflow-x-auto">
+          <CalendarHeatmap
+            startDate={yearStart}
+            endDate={yearEnd}
+            values={values}
+            classForValue={classForValue}
+            showWeekdayLabels={true}
+            tooltipDataAttrs={value => ({
+              'data-tip': value.date ? `${value.date}: ${value.count} kg CO₂` : "No data"
+            })}
+          />
+        </div>
+        <div className="flex flex-col justify-center">
+          <YearSelector years={years} selectedYear={selectedYear} onSelect={setSelectedYear} />
+        </div>
       </div>
       <style>{`
         .react-calendar-heatmap .color-empty { fill: #ffffff46 !important; }
