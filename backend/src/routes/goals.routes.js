@@ -9,6 +9,7 @@ import {
   getGoalCtrl,
   listGoalsCtrl,
   updateGoalCtrl,
+  goalUsageSummaryCtrl,
 } from "../controllers/goals.controller.js";
 
 /**
@@ -27,7 +28,7 @@ const createSchema = z.object({
     maxKg: z.number().min(0),
     startDate: z.string().datetime(),
     endDate: z.string().datetime(),
-    period: z.enum(["weekly", "monthly", "custom"]).optional(),
+    period: z.string().min(1).max(50).optional(),
     alertsEnabled: z.boolean().optional(),
     alertEmail: z.string().email().optional(),
   }),
@@ -42,6 +43,7 @@ const listSchema = z.object({
     page: z.string().default("1"),
     limit: z.string().default("10"),
     status: z.enum(["active", "achieved", "failed"]).optional(),
+    period: z.string().min(1).max(50).optional(),
     search: z.string().max(50).optional(),
   }),
 });
@@ -60,7 +62,7 @@ const updateSchema = z.object({
       startDate: z.string().datetime().optional(),
       endDate: z.string().datetime().optional(),
       status: z.enum(["active", "achieved", "failed"]).optional(),
-      period: z.enum(["weekly", "monthly", "custom"]).optional(),
+      period: z.string().min(1).max(50).optional(),
       alertsEnabled: z.boolean().optional(),
       alertEmail: z.string().email().optional(),
     })
@@ -71,12 +73,19 @@ const updateSchema = z.object({
   query: z.object({}),
 });
 
+const usageSummarySchema = z.object({
+  body: z.object({}).optional(),
+  params: z.object({}),
+  query: z.object({}),
+});
+
 router.post("/", validate(createSchema), createGoalCtrl);
 router.get("/", validate(listSchema), listGoalsCtrl);
 router.get("/:id", validate(idSchema), getGoalCtrl);
 router.put("/:id", validate(updateSchema), updateGoalCtrl);
 router.delete("/:id", validate(idSchema), deleteGoalCtrl);
 router.post("/:id/evaluate", validate(idSchema), evaluateGoalCtrl);
+router.get("/usage/external-summary", validate(usageSummarySchema), goalUsageSummaryCtrl);
 
 /**
  * @openapi
@@ -172,6 +181,20 @@ router.post("/:id/evaluate", validate(idSchema), evaluateGoalCtrl);
  *   post:
  *     tags: [Goals]
  *     summary: Evaluate progress against a goal (may trigger email alert)
+ *     security:
+ *       - cookieAuth: []
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: OK
+ */
+
+/**
+ * @openapi
+ * /goals/usage/external-summary:
+ *   get:
+ *     tags: [Goals]
+ *     summary: External CO2 usage summary for yesterday, last 7 days, and last month (Climatiq-powered)
  *     security:
  *       - cookieAuth: []
  *       - bearerAuth: []

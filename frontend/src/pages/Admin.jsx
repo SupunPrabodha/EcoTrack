@@ -42,10 +42,38 @@ export default function Admin() {
   const [range, setRange] = useState(() => defaultRange());
   const [userSearch, setUserSearch] = useState("");
   const [userPage, setUserPage] = useState(1);
+  const [recsReportBusy, setRecsReportBusy] = useState(false);
+  const [recsReportMsg, setRecsReportMsg] = useState(null);
   const params = useMemo(
     () => ({ from: startOfDayIso(range.from), to: endOfDayIso(range.to) }),
     [range]
   );
+
+  function filenameFromContentDisposition(headerValue, fallback) {
+    if (!headerValue || typeof headerValue !== "string") return fallback;
+    const m = headerValue.match(/filename\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i);
+    const raw = m?.[1] || m?.[2];
+    if (!raw) return fallback;
+    try {
+      return decodeURIComponent(raw);
+    } catch {
+      return raw;
+    }
+  }
+
+  async function downloadBlobAsFile(blob, filename) {
+    const url = URL.createObjectURL(blob);
+    try {
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    } finally {
+      URL.revokeObjectURL(url);
+    }
+  }
 
   const usersParams = useMemo(
     () => ({ page: userPage, limit: 10, ...(userSearch ? { search: userSearch } : {}) }),
@@ -74,6 +102,12 @@ export default function Admin() {
     queryFn: async () => (await api.get("/admin/users", { params: usersParams })).data.data,
   });
 
+  const recsQ = useQuery({
+    queryKey: ["admin-recommendations-analytics", params],
+    queryFn: async () =>
+      (await api.get("/admin/analytics/recommendations", { params: { ...params, limit: 20 } })).data.data,
+  });
+
   const setRoleM = useMutation({
     mutationFn: async ({ id, role }) => (await api.patch(`/admin/users/${id}/role`, { role })).data.data,
     onSuccess: () => {
@@ -81,7 +115,12 @@ export default function Admin() {
     },
   });
 
-  const error = emissionsQ.isError || goalsQ.isError || leaderboardQ.isError || usersQ.isError;
+  const error = emissionsQ.isError || goalsQ.isError || leaderboardQ.isError || usersQ.isError || recsQ.isError;
+
+  const pct = (x) => {
+    if (typeof x !== "number" || !Number.isFinite(x)) return "—";
+    return `${Math.round(x * 100)}%`;
+  };
 
   return (
     <div className="min-h-screen">
@@ -254,6 +293,106 @@ export default function Admin() {
                   ))}
                 </tbody>
               </table>
+            </div>
+          )}
+        </Card>
+
+        <Card title="Recommendation effectiveness (by ruleId)">
+          <div className="flex items-center justify-end mb-3">
+            <button
+              className="rounded-xl bg-gradient-to-r from-slate-800 to-slate-700 hover:from-slate-700 hover:to-slate-600 text-sm px-4 py-2 transition-all disabled:opacity-50"
+              disabled={recsReportBusy}
+              onClick={async () => {
+                setRecsReportBusy(true);
+                try {
+                  const res = await api.get("/admin/reports/recommendations", {
+                    params: { ...params, limit: 20 },
+                    responseType: "blob",
+                  });
+                  const filename = filenameFromContentDisposition(
+                    res.headers?.["content-disposition"],
+                    `ecotrack-admin-recommendations-report-${range.from}-to-${range.to}.pdf`
+                  );
+                  await downloadBlobAsFile(res.data, filename);
+                  setRecsReportMsg("Report downloaded.");
+                } catch {
+                  setRecsReportMsg("Failed to download report.");
+                } finally {
+                  setRecsReportBusy(false);
+                  setTimeout(() => setRecsReportMsg(null), 2000);
+                }
+              }}
+              title="Download a PDF report of global recommendation effectiveness"
+            >
+              {recsReportBusy ? "Preparing PDF…" : "Download PDF report"}
+            </button>
+          </div>
+
+          {recsReportMsg && (
+            <div className="mb-3 rounded-2xl border border-slate-800 bg-slate-900/30 text-slate-200 px-4 py-3 text-sm">
+              {recsReportMsg}
+            </div>
+          )}
+
+          {recsQ.isLoading ? (
+            <div className="text-sm text-slate-400">Loading…</div>
+          ) : (recsQ.data?.byRule || []).length === 0 ? (
+            <div className="text-sm text-slate-400">No saved recommendations in this range yet.</div>
+          ) : (
+            <div className="space-y-4">
+              <div className="grid md:grid-cols-4 gap-4">
+                <div className="rounded-2xl border border-emerald-500/15 bg-slate-900/30 p-4">
+                  <div className="text-xs text-slate-400">Saved recommendations</div>
+                  <div className="text-2xl font-semibold text-slate-100">{recsQ.data?.summary?.total ?? 0}</div>
+                  <div className="text-xs text-slate-500">Users: {recsQ.data?.summary?.users ?? 0}</div>
+                </div>
+                <div className="rounded-2xl border border-emerald-500/15 bg-slate-900/30 p-4">
+                  <div className="text-xs text-slate-400">Done</div>
+                  <div className="text-2xl font-semibold text-slate-100">{recsQ.data?.summary?.done ?? 0}</div>
+                  <div className="text-xs text-slate-500">Dismissed: {recsQ.data?.summary?.dismissed ?? 0}</div>
+                </div>
+                <div className="rounded-2xl border border-emerald-500/15 bg-slate-900/30 p-4">
+                  <div className="text-xs text-slate-400">Useful feedback</div>
+                  <div className="text-2xl font-semibold text-slate-100">{recsQ.data?.summary?.useful ?? 0}</div>
+                  <div className="text-xs text-slate-500">Not useful: {recsQ.data?.summary?.notUseful ?? 0}</div>
+                </div>
+                <div className="rounded-2xl border border-emerald-500/15 bg-slate-900/30 p-4">
+                  <div className="text-xs text-slate-400">Avg estimated savings</div>
+                  <div className="text-2xl font-semibold text-slate-100">
+                    {Number(recsQ.data?.summary?.avgEstimatedKgSaved ?? 0).toFixed?.(2) ?? 0} kg
+                  </div>
+                  <div className="text-xs text-slate-500">Across saved items</div>
+                </div>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-left text-slate-400 border-b border-slate-800">
+                      <th className="py-2 pr-3">Rule</th>
+                      <th className="py-2 pr-3">Total</th>
+                      <th className="py-2 pr-3">Useful rate</th>
+                      <th className="py-2 pr-3">Done rate</th>
+                      <th className="py-2 pr-3">Dismiss rate</th>
+                      <th className="py-2">Avg kg saved</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(recsQ.data?.byRule || []).map((r) => (
+                      <tr key={r.ruleId} className="border-b border-slate-900">
+                        <td className="py-2 pr-3 text-slate-200">{r.ruleId}</td>
+                        <td className="py-2 pr-3 text-slate-300">{r.total}</td>
+                        <td className="py-2 pr-3 text-slate-300">{pct(r.usefulRate)}</td>
+                        <td className="py-2 pr-3 text-slate-300">{pct(r.doneRate)}</td>
+                        <td className="py-2 pr-3 text-slate-300">{pct(r.dismissRate)}</td>
+                        <td className="py-2 text-slate-300">
+                          {Number(r.avgEstimatedKgSaved ?? 0).toFixed?.(2) ?? r.avgEstimatedKgSaved}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
         </Card>

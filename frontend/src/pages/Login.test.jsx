@@ -31,7 +31,10 @@ describe("Login page", () => {
     await user.clear(screen.getByLabelText(/password/i));
     await user.type(screen.getByLabelText(/password/i), "Password123!");
 
-    await user.click(screen.getByRole("button", { name: /^login$/i }));
+    const loginButtons = screen.getAllByRole("button", { name: /^login$/i });
+    const submitLogin = loginButtons.find((b) => b.type === "submit");
+    expect(submitLogin).toBeTruthy();
+    await user.click(submitLogin);
 
     expect(loginFn).toHaveBeenCalledWith("test@example.com", "Password123!");
     expect(await screen.findByText("HOME")).toBeInTheDocument();

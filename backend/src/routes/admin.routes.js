@@ -8,6 +8,8 @@ import {
   emissionsLeaderboardCtrl,
   goalsPerformanceCtrl,
   listUsersCtrl,
+  recommendationsAnalyticsCtrl,
+  recommendationsReportCtrl,
   setUserRoleCtrl,
 } from "../controllers/admin.controller.js";
 
@@ -80,6 +82,30 @@ const leaderboardSchema = z.object({
 router.get("/leaderboard/emissions", validate(leaderboardSchema), emissionsLeaderboardCtrl);
 
 router.get("/analytics/goals", validate(dateRangeSchema), goalsPerformanceCtrl);
+
+const recommendationsAnalyticsSchema = z.object({
+  body: z.object({}).optional(),
+  params: z.object({}),
+  query: z.object({
+    from: z.string().datetime().optional(),
+    to: z.string().datetime().optional(),
+    limit: z.string().default("20"),
+  }),
+});
+
+router.get("/analytics/recommendations", validate(recommendationsAnalyticsSchema), recommendationsAnalyticsCtrl);
+
+const recommendationsReportSchema = z.object({
+  body: z.object({}).optional(),
+  params: z.object({}),
+  query: z.object({
+    from: z.string().datetime().optional(),
+    to: z.string().datetime().optional(),
+    limit: z.string().default("20"),
+  }),
+});
+
+router.get("/reports/recommendations", validate(recommendationsReportSchema), recommendationsReportCtrl);
 
 /**
  * @openapi
@@ -220,6 +246,71 @@ router.get("/analytics/goals", validate(dateRangeSchema), goalsPerformanceCtrl);
  *     responses:
  *       200:
  *         description: OK
+ */
+
+/**
+ * @openapi
+ * /admin/analytics/recommendations:
+ *   get:
+ *     tags: [Admin]
+ *     summary: Recommendation effectiveness analytics by ruleId (admin only)
+ *     description: Aggregates saved recommendations to show done/useful/dismiss rates per ruleId.
+ *     security:
+ *       - cookieAuth: []
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: from
+ *         example: "2026-02-01T00:00:00.000Z"
+ *       - in: query
+ *         name: to
+ *         example: "2026-02-15T23:59:59.000Z"
+ *       - in: query
+ *         name: limit
+ *         example: "20"
+ *     responses:
+ *       200:
+ *         description: OK
+ */
+
+/**
+ * @openapi
+ * /admin/reports/recommendations:
+ *   get:
+ *     tags: [Admin]
+ *     summary: Download a PDF report of global recommendation effectiveness (admin only)
+ *     description: |
+ *       Returns a professional PDF summarizing global recommendation effectiveness by ruleId.
+ *
+ *       Report sections (high-level):
+ *       - Report context (date range + generated timestamp)
+ *       - Summary totals (saved/done/dismissed/useful counts)
+ *       - Effectiveness table by ruleId (rates + averages)
+ *
+ *       The response is sent as a downloadable attachment (`Content-Disposition: attachment`).
+ *     security:
+ *       - cookieAuth: []
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: from
+ *         example: "2026-02-01T00:00:00.000Z"
+ *       - in: query
+ *         name: to
+ *         example: "2026-02-15T23:59:59.000Z"
+ *       - in: query
+ *         name: limit
+ *         example: "20"
+ *     responses:
+ *       200:
+ *         description: PDF report
+ *         content:
+ *           application/pdf:
+ *             schema:
+ *               type: string
+ *               format: binary
+ *       403:
+ *         description: Forbidden
  */
 
 export default router;

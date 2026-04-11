@@ -4,9 +4,11 @@ import { validate } from "../middlewares/validate.js";
 import { requireAuth } from "../middlewares/auth.js";
 import {
   recommendationsDeleteCtrl,
+  recommendationsFeedbackCtrl,
   recommendationsGenerateCtrl,
   recommendationsGetCtrl,
   recommendationsListCtrl,
+  recommendationsReportCtrl,
   recommendationsSaveCtrl,
   recommendationsUpdateCtrl,
 } from "../controllers/recommendations.controller.js";
@@ -30,8 +32,18 @@ const generateSchema = z.object({
   }),
 });
 
+const reportSchema = z.object({
+  body: z.object({}).optional(),
+  params: z.object({}),
+  query: z.object({
+    from: z.string().datetime(),
+    to: z.string().datetime(),
+  }),
+});
+
 const saveSchema = z.object({
   body: z.object({
+    ruleId: z.string().min(1).max(80).optional(),
     title: z.string().min(3).max(120),
     body: z.string().min(10).max(1000),
     impact: z.enum(["Low", "Medium", "High", "Positive"]).optional(),
@@ -56,6 +68,7 @@ const saveSchema = z.object({
     evidence: z
       .object({
         why: z.array(z.string().min(1).max(200)).max(10).optional(),
+        estimatedKgSaved: z.number().min(0).optional(),
         habits: z
           .object({
             car_km: z.object({ totalValue: z.number(), totalKg: z.number() }).optional(),
@@ -68,6 +81,15 @@ const saveSchema = z.object({
             city: z.string().optional(),
             condition: z.string().optional(),
             tempC: z.number().optional(),
+          })
+          .optional(),
+        goals: z
+          .object({
+            activeGoalId: z.string().min(10).optional(),
+            goalTitle: z.string().max(120).optional(),
+            currentKg: z.number().optional(),
+            maxKg: z.number().optional(),
+            exceeded: z.boolean().optional(),
           })
           .optional(),
         range: z
@@ -112,12 +134,27 @@ const updateSchema = z.object({
   query: z.object({}),
 });
 
+const feedbackSchema = z.object({
+  body: z
+    .object({
+      status: z.enum(["saved", "done", "dismissed"]).optional(),
+      dismissDays: z.number().int().min(1).max(365).optional(),
+      rating: z.enum(["useful", "not_useful"]).optional(),
+      feedbackNote: z.string().max(300).optional(),
+    })
+    .refine((b) => Object.keys(b).length > 0, { message: "At least one field is required" }),
+  params: z.object({ id: z.string().min(10) }),
+  query: z.object({}),
+});
+
 router.get("/generate", validate(generateSchema), recommendationsGenerateCtrl);
+router.get("/report", validate(reportSchema), recommendationsReportCtrl);
 
 router.post("/", validate(saveSchema), recommendationsSaveCtrl);
 router.get("/", validate(listSchema), recommendationsListCtrl);
 router.get("/:id", validate(idSchema), recommendationsGetCtrl);
 router.put("/:id", validate(updateSchema), recommendationsUpdateCtrl);
+router.patch("/:id/feedback", validate(feedbackSchema), recommendationsFeedbackCtrl);
 router.delete("/:id", validate(idSchema), recommendationsDeleteCtrl);
 
 /**
@@ -141,6 +178,45 @@ router.delete("/:id", validate(idSchema), recommendationsDeleteCtrl);
  *     responses:
  *       200:
  *         description: OK
+ *       400:
+ *         description: Validation failed
+ */
+
+/**
+ * @openapi
+ * /recommendations/report:
+ *   get:
+ *     tags: [Recommendations]
+ *     summary: Download a PDF report of your saved recommendations for a date range
+ *     description: |
+ *       Returns a professional PDF report summarizing your saved recommendations and feedback in the selected range.
+ *
+ *       Report sections (high-level):
+ *       - Report context (date range + generated timestamp)
+ *       - Summary KPIs (counts and basic rates)
+ *       - Recent saved recommendations (sample list)
+ *
+ *       The response is sent as a downloadable attachment (`Content-Disposition: attachment`).
+ *     security:
+ *       - cookieAuth: []
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: from
+ *         required: true
+ *         example: "2026-02-01T00:00:00.000Z"
+ *       - in: query
+ *         name: to
+ *         required: true
+ *         example: "2026-02-28T23:59:59.000Z"
+ *     responses:
+ *       200:
+ *         description: PDF report
+ *         content:
+ *           application/pdf:
+ *             schema:
+ *               type: string
+ *               format: binary
  *       400:
  *         description: Validation failed
  */
@@ -227,6 +303,44 @@ router.delete("/:id", validate(idSchema), recommendationsDeleteCtrl);
  *     responses:
  *       200:
  *         description: OK
+ */
+
+/**
+ * @openapi
+ * /recommendations/{id}/feedback:
+ *   patch:
+ *     tags: [Recommendations]
+ *     summary: Provide feedback / update workflow status for a saved recommendation
+ *     description: Supports marking as done, dismissing for N days, or rating as useful/not useful.
+ *     security:
+ *       - cookieAuth: []
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           examples:
+ *             done:
+ *               value:
+ *                 status: "done"
+ *             dismiss:
+ *               value:
+ *                 dismissDays: 7
+ *             rate:
+ *               value:
+ *                 rating: "useful"
+ *                 feedbackNote: "This was realistic for my routine"
+ *     responses:
+ *       200:
+ *         description: OK
+ *       400:
+ *         description: Validation failed
+ *       404:
+ *         description: Not found
  */
 
 export default router;
