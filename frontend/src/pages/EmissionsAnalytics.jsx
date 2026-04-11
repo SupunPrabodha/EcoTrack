@@ -1,3 +1,4 @@
+
 import EmissionsPieChart from "../components/EmissionsPieChart";
 import Card from "../components/Card";
 import Navbar from "../components/Navbar";
@@ -5,6 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import { api } from "../api/client";
 import EmissionsLineChart from "../components/EmissionsLineChart";
 import EmissionsHeatmap from "../components/EmissionsHeatmap";
+import DownloadAnalyticsPDFButton from "../components/DownloadAnalyticsPDFButton";
 
 export default function EmissionsAnalytics() {
   // Fetch summary breakdown (same as Dashboard)
@@ -23,15 +25,28 @@ export default function EmissionsAnalytics() {
   return (
     <div className="min-h-screen">
       <Navbar />
-      <div className="max-w-5xl mx-auto px-4 py-8">
-        <div className="grid md:grid-cols-2 gap-6">
-          <Card title="Emissions by Category (Pie Chart)">
-            <EmissionsPieChart data={breakdown} title="Emissions by Category" />
-          </Card>
-          <EmissionsLineChart />
-        </div>
-        <div className="mt-8">
-          <EmissionsHeatmap />
+      <div className="max-w-7xl mx-auto px-4 py-8">
+        <DownloadAnalyticsPDFButton targetId="analytics-section" />
+        <div id="analytics-section" style={{ position: 'relative' }}>
+          {/* Style override for html2canvas: replace oklch with supported colors */}
+          <style>{`
+            #analytics-section, #analytics-section * {
+              color: #e2e8f0 !important;
+              background: none !important;
+              background-color: #0f172a !important;
+              border-color: #334155 !important;
+            }
+            /* You can add more overrides as needed for specific classes */
+          `}</style>
+          <div className="grid md:grid-cols-2 gap-6">
+            <Card title="Emissions by Category (Pie Chart)">
+              <EmissionsPieChart data={breakdown} title="Emissions by Category" />
+            </Card>
+            <EmissionsLineChart />
+          </div>
+          <div className="mt-8">
+            <EmissionsHeatmap />
+          </div>
         </div>
       </div>
     </div>

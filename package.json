@@ -1,5 +1,10 @@
 {
 	"dependencies": {
-		"react-calendar-heatmap": "^1.10.0"
+		"@tippyjs/react": "^4.2.6",
+		"html2canvas": "^1.4.1",
+		"jspdf": "^4.2.1",
+		"react-calendar-heatmap": "^1.10.0",
+		"react-tooltip": "^4.5.1",
+		"tippy.js": "^6.3.7"
 	}
 }
