@@ -189,7 +189,9 @@ export async function getEmissionSummary({ userId, from, to }) {
 	};
 }
 
-export async function getEmissionTrends({ userId, from, to }) {
+export async function getEmissionTrends({ userId, from, to, timezone = "UTC" }) {
+	// Default to UTC grouping for backwards compatibility.
+	// Callers (e.g., monthly reports) can pass a timezone offset like "+05:30".
 	const match = { userId: toObjectIdIfPossible(userId) };
 	if (from || to) {
 		match.date = {};
@@ -206,7 +208,7 @@ export async function getEmissionTrends({ userId, from, to }) {
 					$dateToString: {
 						format: "%Y-%m-%d",
 						date: "$date",
-						timezone: "UTC",
+						timezone,
 					},
 				},
 				totalKg: { $sum: "$emissionKg" },

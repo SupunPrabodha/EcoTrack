@@ -4,8 +4,6 @@ import { sendCreated, sendSuccess } from "../utils/response.js";
 
 export const createHabitCtrl = asyncHandler(async (req, res) => {
   const { type, value, date } = req.validated.body;
-  console.log("type"+ type + "value"+value);
-  
   const habit = await createHabit({ userId: req.user.userId, type, value, date: new Date(date) });
   sendCreated(res, { data: habit });
 });

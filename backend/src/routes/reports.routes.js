@@ -2,7 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { requireAuth } from "../middlewares/auth.js";
 import { validate } from "../middlewares/validate.js";
-import { monthlyReportCtrl } from "../controllers/reports.controller.js";
+import { monthlyReportCtrl, monthlyReportPdfCtrl } from "../controllers/reports.controller.js";
 
 /**
  * @openapi
@@ -19,10 +19,14 @@ const monthSchema = z.object({
   params: z.object({}),
   query: z.object({
     month: z.string().regex(/^\d{4}-\d{2}$/),
+    // Optional client timezone offset in minutes ahead of UTC.
+    // Example: Sri Lanka (UTC+05:30) => 330
+    tzOffset: z.coerce.number().int().min(-840).max(840).optional(),
   }),
 });
 
 router.get("/monthly", validate(monthSchema), monthlyReportCtrl);
+router.get("/monthly/pdf", validate(monthSchema), monthlyReportPdfCtrl);
 
 /**
  * @openapi
@@ -41,6 +45,30 @@ router.get("/monthly", validate(monthSchema), monthlyReportCtrl);
  *     responses:
  *       200:
  *         description: OK
+ */
+
+/**
+ * @openapi
+ * /reports/monthly/pdf:
+ *   get:
+ *     tags: [Reports]
+ *     summary: Monthly emissions report as PDF
+ *     security:
+ *       - cookieAuth: []
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: month
+ *         required: true
+ *         example: "2026-03"
+ *     responses:
+ *       200:
+ *         description: PDF report
+ *         content:
+ *           application/pdf:
+ *             schema:
+ *               type: string
+ *               format: binary
  */
 
 export default router;

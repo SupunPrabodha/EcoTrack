@@ -71,6 +71,26 @@ test("monthly report returns summary + trends", async () => {
   expect(typeof res.body?.data?.feedback).toBe("string");
 });
 
+test("GET /api/reports/monthly/pdf returns a PDF attachment", async () => {
+  // Use previous month to avoid partial month edge cases.
+  const now = new Date();
+  const reportMonthDate = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 10));
+  const month = monthString(reportMonthDate);
+
+  const res = await request(app)
+    .get("/api/reports/monthly/pdf")
+    .set("Cookie", cookie)
+    .query({ month })
+    .buffer(true)
+    .parse(pdfParser);
+
+  expect(res.status).toBe(200);
+  expect(String(res.headers["content-type"] || "")).toContain("application/pdf");
+  expect(String(res.headers["content-disposition"] || "")).toContain("attachment");
+  expect(Buffer.isBuffer(res.body)).toBe(true);
+  expect(res.body.length).toBeGreaterThan(100);
+});
+
 test("GET /api/recommendations/report returns a PDF attachment", async () => {
   const from = new Date("2026-02-01T00:00:00.000Z");
   const to = new Date("2026-02-28T23:59:59.999Z");
