@@ -16,8 +16,8 @@ afterAll(async () => {
   await teardownTestApp(mongo);
 });
 
-test("emissions CRUD for manual entries", async () => {
-  const create = await request(app)
+const createManualEmission = async () => {
+  return request(app)
     .post("/api/emissions")
     .set("Cookie", cookie)
     .send({
@@ -27,12 +27,18 @@ test("emissions CRUD for manual entries", async () => {
       date: new Date().toISOString(),
       notes: "Manual electricity entry",
     });
+};
+
+test("create manual emission entry", async () => {
+  const create = await createManualEmission();
 
   expect(create.status).toBe(201);
   expect(create.body.success).toBe(true);
   expect(create.body.data.emissionKg).toBeGreaterThanOrEqual(0);
+});
 
-  const id = create.body.data._id;
+test("list emissions returns manual entry", async () => {
+  await createManualEmission();
 
   const list = await request(app)
     .get("/api/emissions?page=1&limit=10")
@@ -40,10 +46,20 @@ test("emissions CRUD for manual entries", async () => {
 
   expect(list.status).toBe(200);
   expect(list.body.data.items.length).toBeGreaterThan(0);
+});
+
+test("get manual emission by id", async () => {
+  const create = await createManualEmission();
+  const id = create.body.data._id;
 
   const getOne = await request(app).get(`/api/emissions/${id}`).set("Cookie", cookie);
   expect(getOne.status).toBe(200);
   expect(getOne.body.data._id).toBe(id);
+});
+
+test("update manual emission notes", async () => {
+  const create = await createManualEmission();
+  const id = create.body.data._id;
 
   const update = await request(app)
     .put(`/api/emissions/${id}`)
@@ -51,6 +67,11 @@ test("emissions CRUD for manual entries", async () => {
     .send({ notes: "Updated note" });
   expect(update.status).toBe(200);
   expect(update.body.data.notes).toBe("Updated note");
+});
+
+test("delete manual emission entry", async () => {
+  const create = await createManualEmission();
+  const id = create.body.data._id;
 
   const del = await request(app).delete(`/api/emissions/${id}`).set("Cookie", cookie);
   expect(del.status).toBe(200);
@@ -78,4 +99,19 @@ test("habit-derived emission entry is read-only via emissions CRUD", async () =>
     .send({ notes: "try edit" });
 
   expect(update.status).toBe(403);
+});
+
+test("invalid emission payload returns 400", async () => {
+  const res = await request(app)
+    .post("/api/emissions")
+    .set("Cookie", cookie)
+    .send({
+      sourceType: "manual",
+      habitType: "electricity_kwh",
+      value: -5,
+      date: new Date().toISOString(),
+    });
+
+  expect(res.status).toBe(400);
+  expect(res.body.success).toBe(false);
 });
