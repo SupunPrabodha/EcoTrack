@@ -19,10 +19,12 @@
   "dependencies": {
     "@tanstack/react-query": "^5.90.21",
     "axios": "^1.13.5",
+    "html2canvas": "^1.4.1",
     "jspdf": "^4.2.1",
     "leaflet": "^1.9.4",
     "lucide-react": "^0.563.0",
     "react": "^19.2.0",
+    "react-calendar-heatmap": "^1.10.0",
     "react-dom": "^19.2.0",
     "react-hook-form": "^7.71.1",
     "react-leaflet": "^5.0.0",

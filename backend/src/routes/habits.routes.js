@@ -51,24 +51,31 @@ const summarySchema = z.object({
   query: z.object({
     from: z.string().datetime(),
     to: z.string().datetime(),
-    type: z.string().optional(),
+    type: z.enum(HABIT_TYPES).optional(),
   }),
 });
  
-const idSchema = z.object({
-  body: z.object({ value: z.number().min(0) }).optional(),
+const idOnlySchema = z.object({
+  body: z.object({}).optional(),
   params: z.object({ id: z.string().min(10) }),
-  query: z.object({})
+  query: z.object({}),
 });
+
+const updateSchema = z.object({
+  body: z.object({ value: z.number().min(0) }),
+  params: z.object({ id: z.string().min(10) }),
+  query: z.object({}),
+});
+
 
 router.post("/", validate(createSchema), createHabitCtrl);
 
 router.get("/summary", validate(summarySchema), summarizeHabitsCtrl);
 router.get("/", validate(listSchema), listHabitsCtrl);
-router.get("/:id", validate(idSchema), getHabitCtrl);
-router.put("/:id", validate(idSchema), updateHabitCtrl);
-router.patch("/:id", validate(idSchema), updateHabitCtrl);
-router.delete("/:id", validate(idSchema), deleteHabitCtrl);
+router.get("/:id", validate(idOnlySchema), getHabitCtrl);
+router.put("/:id", validate(updateSchema), updateHabitCtrl);
+router.patch("/:id", validate(updateSchema), updateHabitCtrl);
+router.delete("/:id", validate(idOnlySchema), deleteHabitCtrl);
 
 /**
  * @openapi

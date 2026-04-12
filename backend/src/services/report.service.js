@@ -1,4 +1,6 @@
 import { Goal } from "../models/Goal.js";
+import { Habit } from "../models/Habit.js";
+import { EmissionEntry } from "../models/EmissionEntry.js";
 import { getEmissionSummary, getEmissionTrends } from "./emission.service.js";
 import { buildRecommendations } from "./recommendation.service.js";
 import { ApiError } from "../utils/ApiError.js";
@@ -19,10 +21,80 @@ function parseMonth(month) {
   return { year, monthIndex };
 }
 
-function monthRangeUtc({ year, monthIndex }) {
-  const from = new Date(Date.UTC(year, monthIndex - 1, 1, 0, 0, 0, 0));
-  const to = new Date(Date.UTC(year, monthIndex, 0, 23, 59, 59, 999));
+function monthRangeLocal({ year, monthIndex }) {
+  const from = new Date(year, monthIndex - 1, 1, 0, 0, 0, 0);
+  const to = new Date(year, monthIndex, 0, 23, 59, 59, 999);
   return { from, to };
+}
+
+function localTzOffsetString(d = new Date()) {
+  // JS getTimezoneOffset() returns minutes behind UTC.
+  // Convert to offset string accepted by MongoDB, e.g. "+05:30".
+  const total = -d.getTimezoneOffset();
+  const sign = total >= 0 ? "+" : "-";
+  const abs = Math.abs(total);
+  const hh = String(Math.floor(abs / 60)).padStart(2, "0");
+  const mm = String(abs % 60).padStart(2, "0");
+  return `${sign}${hh}:${mm}`;
+}
+
+function tzOffsetMinutesToString(tzOffsetMinutes) {
+  if (tzOffsetMinutes == null) return null;
+  const total = Number(tzOffsetMinutes);
+  if (!Number.isFinite(total)) throw new ApiError(400, "Invalid tzOffset");
+  if (total < -840 || total > 840) throw new ApiError(400, "Invalid tzOffset");
+  const sign = total >= 0 ? "+" : "-";
+  const abs = Math.abs(total);
+  const hh = String(Math.floor(abs / 60)).padStart(2, "0");
+  const mm = String(abs % 60).padStart(2, "0");
+  return `${sign}${hh}:${mm}`;
+}
+
+function monthRangeWithOffset({ year, monthIndex, tzOffsetMinutes }) {
+  // tzOffsetMinutes is minutes ahead of UTC. Example: UTC+05:30 => 330.
+  // We compute UTC instants that correspond to local month boundaries.
+  const offsetMs = Number(tzOffsetMinutes) * 60 * 1000;
+  const startUtcMs = Date.UTC(year, monthIndex - 1, 1, 0, 0, 0, 0) - offsetMs;
+  const endUtcMs = Date.UTC(year, monthIndex, 1, 0, 0, 0, 0) - offsetMs - 1;
+  return { from: new Date(startUtcMs), to: new Date(endUtcMs) };
+}
+
+function monthRangeLabel({ year, monthIndex }) {
+  const lastDay = new Date(Date.UTC(year, monthIndex, 0)).getUTCDate();
+  const mm = String(monthIndex).padStart(2, "0");
+  return `${year}-${mm}-01 → ${year}-${mm}-${String(lastDay).padStart(2, "0")}`;
+}
+
+async function backfillEmissionEntriesFromHabits({ userId, from, to }) {
+  // Older data (or older backend builds) may have Habit logs without mirrored EmissionEntry rows.
+  // Monthly reports are computed from EmissionEntry, so we upsert missing rows from Habits.
+  const habits = await Habit.find({ userId, date: { $gte: from, $lte: to } })
+    .select("_id userId type value emissionKg calculationMethod date")
+    .lean();
+
+  if (!habits.length) return { habits: 0, upserts: 0 };
+
+  const ops = habits.map((h) => ({
+    updateOne: {
+      filter: { userId: h.userId, habitId: h._id },
+      update: {
+        $set: {
+          userId: h.userId,
+          habitId: h._id,
+          sourceType: "habit",
+          habitType: h.type,
+          value: h.value,
+          emissionKg: h.emissionKg,
+          calculationMethod: h.calculationMethod,
+          date: h.date,
+        },
+      },
+      upsert: true,
+    },
+  }));
+
+  const res = await EmissionEntry.bulkWrite(ops, { ordered: false });
+  return { habits: habits.length, upserts: Number(res?.upsertedCount ?? 0) };
 }
 
 function previousMonth({ year, monthIndex }) {
@@ -88,13 +160,18 @@ function contributorRecommendation(type) {
   };
 }
 
-export async function getMonthlyReport({ userId, month }) {
+export async function getMonthlyReport({ userId, month, tzOffsetMinutes } = {}) {
   const ym = parseMonth(month);
-  const range = monthRangeUtc(ym);
+  const tzFromClient = tzOffsetMinutesToString(tzOffsetMinutes);
+  const range = tzFromClient ? monthRangeWithOffset({ ...ym, tzOffsetMinutes }) : monthRangeLocal(ym);
+  const tz = tzFromClient || localTzOffsetString();
+
+  // Ensure report source data exists for habit logs.
+  await backfillEmissionEntriesFromHabits({ userId, from: range.from, to: range.to });
 
   const [summary, trends] = await Promise.all([
     getEmissionSummary({ userId, from: range.from, to: range.to }),
-    getEmissionTrends({ userId, from: range.from, to: range.to }),
+    getEmissionTrends({ userId, from: range.from, to: range.to, timezone: tz }),
   ]);
 
   const goal = await Goal.findOne({
@@ -105,7 +182,7 @@ export async function getMonthlyReport({ userId, month }) {
   }).sort({ createdAt: -1 });
 
   const prevYm = previousMonth(ym);
-  const prevRange = monthRangeUtc(prevYm);
+  const prevRange = monthRangeLocal(prevYm);
   const prevSummary = await getEmissionSummary({ userId, from: prevRange.from, to: prevRange.to });
 
   const totalKg = Number(summary?.totalKg ?? 0);
@@ -150,6 +227,7 @@ export async function getMonthlyReport({ userId, month }) {
   return {
     month,
     range: { from: range.from, to: range.to },
+    rangeLabel: monthRangeLabel(ym),
     summary,
     trends,
     level,
@@ -173,6 +251,95 @@ export async function getMonthlyReport({ userId, month }) {
       : null,
     recommendations,
   };
+}
+
+function levelBg(level) {
+  const x = String(level || "").toLowerCase();
+  if (x === "high") return "#ef4444";
+  if (x === "low") return BRAND.emerald;
+  return BRAND.cyan;
+}
+
+export async function generateMonthlyEmissionsReportPdf({ userId, month, tzOffsetMinutes } = {}) {
+  const report = await getMonthlyReport({ userId, month, tzOffsetMinutes });
+  const user = await User.findById(userId).select("name email").lean();
+  if (!user) throw new ApiError(404, "User not found");
+
+  const totalKg = safeNum(report?.summary?.totalKg ?? 0, 2);
+  const entries = Number(report?.summary?.count ?? 0);
+  const deltaKg = safeNum(report?.comparison?.deltaKg ?? 0, 2);
+  const prevTotalKg = safeNum(report?.comparison?.previousTotalKg ?? 0, 2);
+  const deltaPct =
+    typeof report?.comparison?.deltaPct === "number" && Number.isFinite(report.comparison.deltaPct)
+      ? `${safeNum(report.comparison.deltaPct, 1)}%`
+      : "—";
+
+  const goalMaxKg = report?.goal?.maxKg != null ? safeNum(report.goal.maxKg, 2) : null;
+  const goalText = goalMaxKg != null ? `${goalMaxKg} kg` : "—";
+
+  const daily = Array.isArray(report?.trends) ? report.trends : [];
+
+  return renderPdf((doc) => {
+    drawBrandHeader(doc, {
+      title: "EcoTrack — Monthly Emissions Report",
+      subtitle: `Generated ${fmtDateTime(new Date())} • ${report.month} • ${report.rangeLabel || ""}`.trim(),
+    });
+
+    // Keep the same *content* structure as the old Habits-page PDF,
+    // but render it using the shared pdf.js template (same style as recommendations PDF).
+    sectionTitle(doc, "Report context");
+    keyValue(doc, "User", `${user.name} <${user.email}>`);
+    keyValue(doc, "Month", report.month);
+    keyValue(doc, "Total emissions", `${totalKg} kg CO2e`);
+    keyValue(doc, "Generated", fmtDateTime(new Date()));
+
+    // Keep extra fields minimal (old PDF didn't show them), but retain goal at-a-glance.
+    if (report.goal?.title) {
+      keyValue(doc, "Monthly goal", `${goalText} (${report.goal.title})`);
+    }
+
+    const startX = doc.page.margins.left;
+    const y0 = doc.y;
+    doc.font("Helvetica").fontSize(10).fillColor(BRAND.muted).text("Level", startX, y0);
+    drawBadge(doc, { text: report.level, x: startX + 110, y: y0 - 2, bg: levelBg(report.level) });
+    doc.moveDown(0.8);
+
+    sectionTitle(doc, "Daily breakdown");
+    if (!daily.length) {
+      doc.font("Helvetica").fontSize(9).fillColor(BRAND.muted).text("No daily trend data for this month.");
+    } else {
+      let y = doc.y;
+      const cols = {
+        day: startX,
+        kg: startX + 160,
+        entries: startX + 260,
+      };
+      const headers = [
+        { key: "day", label: "Day", width: 150 },
+        { key: "kg", label: "Total kg", width: 90 },
+        { key: "entries", label: "Entries", width: 90 },
+      ];
+      y = drawTableHeader(doc, { y, cols, headers });
+      doc.fillColor(BRAND.text).font("Helvetica").fontSize(9);
+
+      let zebra = false;
+      for (const row of daily.slice(0, 31)) {
+        if (y > 760) {
+          doc.addPage();
+          y = doc.y;
+          y = drawTableHeader(doc, { y, cols, headers });
+          zebra = false;
+        }
+
+        zebra = !zebra;
+        drawZebraRow(doc, { y, zebraOn: zebra });
+        doc.text(String(row?._id ?? "—"), cols.day, y, { width: 150 });
+        doc.text(String(safeNum(row?.totalKg ?? 0, 2)), cols.kg, y, { width: 90 });
+        doc.text(String(Number(row?.entries ?? 0)), cols.entries, y, { width: 90 });
+        y += 16;
+      }
+    }
+  });
 }
 
 function ensureDate(value, name) {

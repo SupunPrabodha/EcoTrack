@@ -4,7 +4,6 @@ import Card from "../components/Card";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "../api/client";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
-import { jsPDF } from "jspdf";
 import { IconCalendar, IconEdit, IconLeaf, IconRefresh, IconSave, IconSparkles, IconTrash } from "../components/Icons";
 
 function dateOnly(d) {
@@ -46,6 +45,8 @@ export default function Habits() {
     return monthOnly(d);
   });
 
+  const tzOffsetMinutes = useMemo(() => -new Date().getTimezoneOffset(), []);
+
   const [editingId, setEditingId] = useState(null);
   const [editValue, setEditValue] = useState("");
 
@@ -75,8 +76,9 @@ export default function Habits() {
   });
 
   const monthlyReportQ = useQuery({
-    queryKey: ["monthly-report", reportMonth],
-    queryFn: async () => (await api.get("/reports/monthly", { params: { month: reportMonth } })).data.data,
+    queryKey: ["monthly-report", reportMonth, tzOffsetMinutes],
+    queryFn: async () =>
+      (await api.get("/reports/monthly", { params: { month: reportMonth, tzOffset: tzOffsetMinutes } })).data.data,
     staleTime: 60_000,
     gcTime: 10 * 60_000,
     refetchOnWindowFocus: false,
@@ -89,97 +91,26 @@ export default function Habits() {
   );
 
   const downloadMonthlyPdf = async () => {
-    const report = monthlyReportQ.data;
-    if (!report) return;
+    if (!reportMonth) return;
+    try {
+      const res = await api.get("/reports/monthly/pdf", {
+        params: { month: reportMonth, tzOffset: tzOffsetMinutes },
+        responseType: "blob",
+      });
 
-    const pageWidth = 595.28; // A4 width in pt
-    const headerH = 84;
-
-    async function svgUrlToPngDataUrl(url, w, h) {
-      const res = await fetch(url);
-      const svgText = await res.text();
-      const blob = new Blob([svgText], { type: "image/svg+xml" });
-      const blobUrl = URL.createObjectURL(blob);
-
-      try {
-        const img = await new Promise((resolve, reject) => {
-          const i = new Image();
-          i.crossOrigin = "anonymous";
-          i.onload = () => resolve(i);
-          i.onerror = reject;
-          i.src = blobUrl;
-        });
-
-        const canvas = document.createElement("canvas");
-        canvas.width = w;
-        canvas.height = h;
-        const ctx = canvas.getContext("2d");
-        if (!ctx) return null;
-        ctx.clearRect(0, 0, w, h);
-        ctx.drawImage(img, 0, 0, w, h);
-        return canvas.toDataURL("image/png");
-      } catch {
-        return null;
-      } finally {
-        URL.revokeObjectURL(blobUrl);
-      }
+      const blob = new Blob([res.data], { type: "application/pdf" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `EcoTrack-monthly-report-${reportMonth}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error("Failed to download monthly PDF", err);
+      window.alert("Failed to download monthly report PDF.");
     }
-
-    const doc = new jsPDF({ unit: "pt", format: "a4" });
-    const marginX = 48;
-    let y = headerH + 28;
-
-    // Branded header (emerald + cyan accent)
-    doc.setFillColor(16, 185, 129);
-    doc.rect(0, 0, pageWidth, headerH, "F");
-    doc.setFillColor(6, 182, 212);
-    doc.rect(0, headerH - 6, pageWidth, 6, "F");
-
-    const logoPng = await svgUrlToPngDataUrl("/ecotrack-icon.svg", 64, 64);
-    if (logoPng) {
-      doc.addImage(logoPng, "PNG", marginX, 16, 40, 40);
-    }
-
-    doc.setTextColor(255, 255, 255);
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(18);
-    doc.text("EcoTrack", logoPng ? marginX + 52 : marginX, 36);
-    doc.setFontSize(12);
-    doc.setFont("helvetica", "normal");
-    doc.text("Monthly Emissions Report", logoPng ? marginX + 52 : marginX, 56);
-
-    doc.setTextColor(15, 23, 42);
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(11);
-    doc.text(`Month: ${reportMonth}`, marginX, y);
-    y += 16;
-    doc.text(`Total emissions: ${Number(report?.summary?.totalKg ?? 0).toFixed(2)} kg CO2e`, marginX, y);
-    y += 16;
-    doc.text(`Generated: ${new Date().toLocaleString()}`, marginX, y);
-    y += 24;
-
-    doc.setFont("helvetica", "bold");
-    doc.text("Daily breakdown", marginX, y);
-    y += 14;
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(10);
-
-    const rows = Array.isArray(report?.trends) ? report.trends : [];
-    if (rows.length === 0) {
-      doc.text("No data for this month.", marginX, y);
-    } else {
-      for (const r of rows) {
-        const line = `${r._id}: ${Number(r.totalKg ?? 0).toFixed(2)} kg`;
-        if (y > 770) {
-          doc.addPage();
-          y = 56;
-        }
-        doc.text(line, marginX, y);
-        y += 14;
-      }
-    }
-
-    doc.save(`EcoTrack-monthly-report-${reportMonth}.pdf`);
   };
 
   const createM = useMutation({
@@ -351,6 +282,7 @@ export default function Habits() {
               {createM.error?.response?.data?.message || "Failed to add habit"}
             </div>
           )}
+
         </Card>
 
         <Card title="Today (carbon emission)">
