@@ -46,6 +46,12 @@ describe("Recommendations page", () => {
     api.post.mockReset();
     api.patch.mockReset();
     api.delete.mockReset();
+
+    try {
+      localStorage.clear();
+    } catch {
+      // ignore
+    }
   });
 
   it("renders generated tips and weather context", async () => {
@@ -199,5 +205,128 @@ describe("Recommendations page", () => {
         expect.objectContaining({ responseType: "blob" })
       );
     });
+  });
+
+  it("uses browser geolocation and sends lat/lon/region to the generator", async () => {
+    localStorage.setItem("ecotrack_region", "1");
+
+    const genParams = [];
+    api.get.mockImplementation(async (url, config) => {
+      if (url === "/recommendations/generate") {
+        genParams.push(config?.params);
+        return {
+          data: {
+            data: {
+              weather: { city: "Colombo", tempC: 30, condition: "Clear" },
+              tips: [
+                {
+                  ruleId: "car_reduce",
+                  title: "Cut down car travel",
+                  body: "Try public transport for 1–2 trips.",
+                  impact: "High",
+                  estimatedKgSaved: 5,
+                  confidence: "medium",
+                  why: ["Car travel is high in the selected range."],
+                },
+              ],
+              evidence: { habits: { car_km: { totalValue: 80, totalKg: 100 } } },
+            },
+          },
+        };
+      }
+
+      if (url === "/recommendations") {
+        return {
+          data: {
+            success: true,
+            data: { items: [], total: 0, page: 1, limit: 6, pages: 1 },
+            meta: { page: 1, pages: 1, total: 0 },
+          },
+        };
+      }
+
+      throw new Error(`Unexpected GET ${url}`);
+    });
+
+    Object.defineProperty(globalThis.navigator, "geolocation", {
+      value: {
+        getCurrentPosition: vi.fn((success) =>
+          success({ coords: { latitude: 6.9271, longitude: 79.8612 } })
+        ),
+      },
+      configurable: true,
+    });
+
+    const user = userEvent.setup();
+    renderPage();
+
+    expect(await screen.findByText("Cut down car travel")).toBeInTheDocument();
+
+    // Initial call should include region but no coords.
+    expect(genParams.length).toBeGreaterThan(0);
+    expect(genParams[0]?.region).toBe("1");
+    expect(genParams[0]?.lat).toBeUndefined();
+    expect(genParams[0]?.lon).toBeUndefined();
+
+    await user.click(screen.getByRole("button", { name: /use my location/i }));
+
+    await waitFor(() => {
+      const last = genParams.at(-1);
+      expect(last?.lat).toBe(6.9271);
+      expect(last?.lon).toBe(79.8612);
+      expect(last?.region).toBe("1");
+    });
+  });
+
+  it("renders observed impact when present on saved recommendations", async () => {
+    api.get.mockImplementation(async (url) => {
+      if (url === "/recommendations/generate") {
+        return {
+          data: {
+            data: {
+              weather: null,
+              tips: [],
+              evidence: { habits: {} },
+            },
+          },
+        };
+      }
+
+      if (url === "/recommendations") {
+        return {
+          data: {
+            success: true,
+            data: {
+              items: [
+                {
+                  _id: "r1",
+                  title: "Reduce car use",
+                  body: "Try cutting car usage for a week.",
+                  status: "done",
+                  impact: "High",
+                  observedImpact: {
+                    windowDays: 7,
+                    deltaKg: 10,
+                    computedAt: new Date().toISOString(),
+                  },
+                },
+              ],
+              total: 1,
+              page: 1,
+              limit: 6,
+              pages: 1,
+            },
+            meta: { page: 1, pages: 1, total: 1 },
+          },
+        };
+      }
+
+      throw new Error(`Unexpected GET ${url}`);
+    });
+
+    renderPage();
+
+    expect(await screen.findByText("Reduce car use")).toBeInTheDocument();
+    expect(screen.getByText(/Observed impact \(7d\):.*10 kg CO2e/i)).toBeInTheDocument();
   });
 });
