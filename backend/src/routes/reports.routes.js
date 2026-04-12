@@ -19,6 +19,9 @@ const monthSchema = z.object({
   params: z.object({}),
   query: z.object({
     month: z.string().regex(/^\d{4}-\d{2}$/),
+    // Optional client timezone offset in minutes ahead of UTC.
+    // Example: Sri Lanka (UTC+05:30) => 330
+    tzOffset: z.coerce.number().int().min(-840).max(840).optional(),
   }),
 });
 

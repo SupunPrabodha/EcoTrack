@@ -45,6 +45,8 @@ export default function Habits() {
     return monthOnly(d);
   });
 
+  const tzOffsetMinutes = useMemo(() => -new Date().getTimezoneOffset(), []);
+
   const [editingId, setEditingId] = useState(null);
   const [editValue, setEditValue] = useState("");
 
@@ -74,8 +76,9 @@ export default function Habits() {
   });
 
   const monthlyReportQ = useQuery({
-    queryKey: ["monthly-report", reportMonth],
-    queryFn: async () => (await api.get("/reports/monthly", { params: { month: reportMonth } })).data.data,
+    queryKey: ["monthly-report", reportMonth, tzOffsetMinutes],
+    queryFn: async () =>
+      (await api.get("/reports/monthly", { params: { month: reportMonth, tzOffset: tzOffsetMinutes } })).data.data,
     staleTime: 60_000,
     gcTime: 10 * 60_000,
     refetchOnWindowFocus: false,
@@ -91,7 +94,7 @@ export default function Habits() {
     if (!reportMonth) return;
     try {
       const res = await api.get("/reports/monthly/pdf", {
-        params: { month: reportMonth },
+        params: { month: reportMonth, tzOffset: tzOffsetMinutes },
         responseType: "blob",
       });
 
@@ -279,6 +282,7 @@ export default function Habits() {
               {createM.error?.response?.data?.message || "Failed to add habit"}
             </div>
           )}
+
         </Card>
 
         <Card title="Today (carbon emission)">
