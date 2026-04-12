@@ -23,8 +23,6 @@ export const createEmissionCtrl = asyncHandler(async (req, res) => {
 		region,
 	});
 	sendCreated(res, { data: entry });
-	console.log("sourcetype "+sourceType+" habittype "+habitType+" value "+value+" emissionKg "+emissionKg+" notes "+notes+" date "+date+" region "+region);
-	
 });
 
 export const listEmissionsCtrl = asyncHandler(async (req, res) => {

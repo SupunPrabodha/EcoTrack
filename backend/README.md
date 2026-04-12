@@ -31,7 +31,7 @@ Recommended (production with separate frontend hosting):
 
 - `NODE_ENV=production`
 - `TRUST_PROXY=true`
-- `CORS_ORIGINS=https://<your-frontend-domain>`
+- `CORS_ORIGINS=https://eco-track-gamma.vercel.app/`
 - `COOKIE_SECURE=true`
 - `COOKIE_SAMESITE=none`
 

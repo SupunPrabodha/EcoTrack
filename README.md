@@ -121,7 +121,7 @@ Create an environment variable:
 
 - `baseUrl`
   - Local: `http://localhost:5000/api`
-  - Deployed: `https://<your-render-app>.onrender.com/api`
+  - Deployed: `https://ecotrack-8ad9.onrender.com/api`
 
 ### 2) Authentication flow (cookie-based)
 
@@ -312,11 +312,11 @@ All third-party integrations are optional. If keys are missing/invalid, the app 
 
 ## Deployment Report (Rubric)
 
-### Live URLs (fill for final submission)
+### Live URLs
 
-- Backend API: `<paste deployed backend API URL>`
-- Swagger UI: `<paste deployed swagger URL>`
-- Frontend App: `<paste deployed frontend URL>`
+- Backend API: `https://ecotrack-8ad9.onrender.com`
+- Swagger UI: `https://ecotrack-8ad9.onrender.com/api/docs/`
+- Frontend App: `https://eco-track-gamma.vercel.app/`
 
 ### Backend Deployment (Render/Railway)
 
@@ -331,7 +331,7 @@ All third-party integrations are optional. If keys are missing/invalid, the app 
   - `JWT_SECRET=<masked>`
 - If frontend is on a different domain (Vercel/Netlify):
   - `TRUST_PROXY=true`
-  - `CORS_ORIGINS=https://<your-frontend-domain>`
+  - `CORS_ORIGINS=https://eco-track-gamma.vercel.app/`
   - `COOKIE_SECURE=true`
   - `COOKIE_SAMESITE=none`
 
@@ -347,15 +347,26 @@ Verify:
 3) Output directory: `dist`
 4) Environment variables:
 
-- `VITE_API_BASE_URL=https://<your-backend-domain>/api`
+- `VITE_API_BASE_URL=https://ecotrack-8ad9.onrender.com/api/`
 
 ### Evidence (Screenshots)
 
 Include screenshots showing:
 
 - Swagger UI working (`/api/docs`)
+![alt text](image.png)
+
 - Frontend home/login page
-- A protected feature working after login (e.g., Dashboard or Habits)
+![alt text](image-1.png)
+![alt text](image-2.png)
+
+- A protected feature working after login
+![alt text](image-3.png)
+![alt text](image-4.png)
+![alt text](image-5.png)
+![alt text](image-6.png)
+![alt text](image-7.png)
+![alt text](image-8.png)
 
 ## Testing Instruction Report (Rubric)
 

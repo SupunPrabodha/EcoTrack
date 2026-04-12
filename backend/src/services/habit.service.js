@@ -17,8 +17,6 @@ function toDayStart(date) {
 }
 
 export async function createHabit({ userId, type, value, date }) {
-  console.log("came inside createhabit");
-
   const day = toDayStart(date);
   const { emissionKg, method } = await calculateEmission({ habitType: type, value, date: day });
 

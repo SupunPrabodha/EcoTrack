@@ -16,7 +16,7 @@ Create a `.env` based on `.env.example`.
 - `VITE_API_BASE_URL`
 	- Local dev (recommended): `/api` (Vite proxies to the backend)
 	- Same-host deployment: `/api`
-	- Separate hosting: `https://your-backend.example.com/api`
+	- Separate hosting: `https://ecotrack-8ad9.onrender.com`
 
 ## Run locally
 
@@ -68,7 +68,7 @@ Then call the bootstrap endpoint once (it only works if no admin exists yet):
 3) Output directory: `dist`
 4) Set environment variables:
 
-- `VITE_API_BASE_URL=https://<your-backend-domain>/api`
+- `VITE_API_BASE_URL=https://https://ecotrack-8ad9.onrender.com/api`
 
 ## Deployment notes (cookies + CORS)
 
