@@ -80,7 +80,8 @@ export async function getAirPollution(lat, lon) {
       so2: 3.1,
     };
   }
-  if (!env.OPENWEATHER_API_KEY || !lat || !lon) return null;
+  if (!env.OPENWEATHER_API_KEY) return null;
+  if (typeof lat !== "number" || !Number.isFinite(lat) || typeof lon !== "number" || !Number.isFinite(lon)) return null;
 
   const cacheKey = `${lat.toFixed(2)},${lon.toFixed(2)}`;
   const now = Date.now();
@@ -128,7 +129,8 @@ export async function getWeatherByCoords(lat, lon) {
       lon,
     };
   }
-  if (!env.OPENWEATHER_API_KEY || !lat || !lon) return null;
+  if (!env.OPENWEATHER_API_KEY) return null;
+  if (typeof lat !== "number" || !Number.isFinite(lat) || typeof lon !== "number" || !Number.isFinite(lon)) return null;
 
   try {
     const { data } = await openWeather.get("/data/2.5/weather", {
@@ -173,7 +175,8 @@ export async function getNearbyPlacesWeather(lat, lon, { cnt = 12 } = {}) {
       };
     });
   }
-  if (!env.OPENWEATHER_API_KEY || !lat || !lon) return [];
+  if (!env.OPENWEATHER_API_KEY) return [];
+  if (typeof lat !== "number" || !Number.isFinite(lat) || typeof lon !== "number" || !Number.isFinite(lon)) return [];
 
   const safeCnt = Math.max(1, Math.min(30, Number(cnt) || 12));
   const cacheKey = `${lat.toFixed(2)},${lon.toFixed(2)},${safeCnt}`;

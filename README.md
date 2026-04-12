@@ -253,13 +253,17 @@ Frontend (UI):
 - The saved card shows `Status` and (when dismissed) the `dismissedUntil` date.
 - Open “Why was this suggested?” → shows `Confidence` and `Data used` (habits/weather/goals).
 - Cooldown: the generator won’t repeat the same `ruleId` for a few days (default 7) and will respect dismissals.
+- New rules also cover `plastic_items` and a public-transport shift suggestion when car usage is high.
 - With an active goal overlapping the selected range, generated tips are ordered by biggest emission contributor first.
+- Feedback loop: repeated `Not useful` feedback can automatically add the `ruleId` to `preferences.recommendations.excludedRuleIds` (default threshold: 2).
+- Observed impact: after a recommendation is marked `Done` and enough time passes, saved items can include `observedImpact.deltaKg`.
 
 Backend (API):
 
 - Use Postman:
-  - `GET /recommendations/generate?from=...&to=...`
+  - `GET /recommendations/generate?from=...&to=...` (optional: `&lat=...&lon=...&region=...`)
   - `PATCH /recommendations/:id/feedback` with the examples above.
+  - `POST /recommendations/digest` to generate and email a short digest (requires email config).
   - Personalization (optional but recommended for viva):
     - `PATCH /auth/me` with:
       - `preferences.diet` = `vegetarian` or `vegan` (suppresses `meat_reduce`)

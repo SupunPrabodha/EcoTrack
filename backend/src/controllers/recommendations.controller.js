@@ -5,6 +5,7 @@ import {
   getRecommendation,
   listRecommendations,
   saveRecommendation,
+  sendRecommendationsDigest,
   updateRecommendation,
   updateRecommendationFeedback,
 } from "../services/recommendation.service.js";
@@ -12,8 +13,12 @@ import { sendCreated, sendSuccess } from "../utils/response.js";
 import { generateUserRecommendationsReportPdf } from "../services/report.service.js";
 
 export const recommendationsGenerateCtrl = asyncHandler(async (req, res) => {
-  const { from, to } = req.validated.query;
-  const data = await buildRecommendations(req.user.userId, new Date(from), new Date(to));
+  const { from, to, lat, lon, region } = req.validated.query;
+  const data = await buildRecommendations(req.user.userId, new Date(from), new Date(to), {
+    lat: lat === undefined ? undefined : Number(lat),
+    lon: lon === undefined ? undefined : Number(lon),
+    region: region || undefined,
+  });
   sendSuccess(res, { data });
 });
 
@@ -66,4 +71,19 @@ export const recommendationsReportCtrl = asyncHandler(async (req, res) => {
   res.setHeader("Content-Type", "application/pdf");
   res.setHeader("Content-Disposition", `attachment; filename="ecotrack-recommendations-report.pdf"`);
   res.status(200).send(pdf);
+});
+
+export const recommendationsDigestCtrl = asyncHandler(async (req, res) => {
+  const { from, to, periodDays, lat, lon, region, maxTips } = req.validated.body || {};
+  const data = await sendRecommendationsDigest({
+    userId: req.user.userId,
+    from,
+    to,
+    periodDays,
+    lat,
+    lon,
+    region,
+    maxTips,
+  });
+  sendSuccess(res, { data });
 });

@@ -50,8 +50,193 @@ test("PATCH /api/recommendations/:id/feedback updates status/rating/dismiss", as
   expect(updated.rating).toBe("useful");
   expect(updated.feedbackNote).toBe("nice");
   expect(updated.dismissedUntil).toBeTruthy();
+  expect(updated.doneAt).toBeTruthy();
   expect(Array.isArray(updated.audit)).toBe(true);
   expect(updated.audit.length).toBeGreaterThan(0);
+});
+
+test("GET /api/recommendations/generate supports lat/lon and includes weather_walk when AQI is not bad", async () => {
+  const from = new Date("2026-06-01T00:00:00.000Z");
+  const to = new Date("2026-06-07T23:59:59.000Z");
+
+  const res = await request(app)
+    .get("/api/recommendations/generate")
+    .set("Cookie", cookie)
+    .query({
+      from: from.toISOString(),
+      to: to.toISOString(),
+      lat: 51.5,
+      lon: -0.12,
+      region: "1",
+    });
+
+  expect(res.status).toBe(200);
+  expect(res.body?.data?.weather).toBeTruthy();
+  expect(res.body?.data?.evidence?.airPollution).toBeTruthy();
+
+  const tips = res.body?.data?.tips || [];
+  expect(tips.some((t) => t.ruleId === "weather_walk")).toBe(true);
+});
+
+test("Generator includes plastic_reduce when plastic_items is high", async () => {
+  const plasticCookie = await registerAndLogin(app, { email: "plastic_user@example.com" });
+  const plasticUser = await User.findOne({ email: "plastic_user@example.com" }).lean();
+  const plasticUserId = plasticUser?._id;
+
+  const from = new Date("2026-06-10T00:00:00.000Z");
+  const to = new Date("2026-06-16T23:59:59.000Z");
+
+  await Habit.create({
+    userId: plasticUserId,
+    type: "plastic_items",
+    value: 80,
+    emissionKg: 4.8,
+    date: new Date("2026-06-12T10:00:00.000Z"),
+  });
+
+  const res = await request(app)
+    .get("/api/recommendations/generate")
+    .set("Cookie", plasticCookie)
+    .query({ from: from.toISOString(), to: to.toISOString() });
+
+  expect(res.status).toBe(200);
+  const tips = res.body?.data?.tips || [];
+  expect(tips.some((t) => t.ruleId === "plastic_reduce")).toBe(true);
+});
+
+test("Generator uses grid intensity to estimate electricity_reduce savings when available", async () => {
+  const elecCookie = await registerAndLogin(app, { email: "intensity_user@example.com" });
+  const elecUser = await User.findOne({ email: "intensity_user@example.com" }).lean();
+  const elecUserId = elecUser?._id;
+
+  const from = new Date("2026-07-01T00:00:00.000Z");
+  const to = new Date("2026-07-07T23:59:59.000Z");
+
+  await Habit.create({
+    userId: elecUserId,
+    type: "electricity_kwh",
+    value: 100,
+    emissionKg: 85,
+    date: new Date("2026-07-03T10:00:00.000Z"),
+  });
+
+  const res = await request(app)
+    .get("/api/recommendations/generate")
+    .set("Cookie", elecCookie)
+    .query({ from: from.toISOString(), to: to.toISOString(), region: "1" });
+
+  expect(res.status).toBe(200);
+  const tips = res.body?.data?.tips || [];
+  const elecTip = tips.find((t) => t.ruleId === "electricity_reduce");
+  expect(elecTip).toBeTruthy();
+  // In test mode, getGridCarbonIntensity returns 123 gCO2/kWh.
+  // savings = 100 kWh * 10% * 123 / 1000 = 1.23 kg
+  expect(elecTip.estimatedKgSaved).toBeCloseTo(1.23, 2);
+});
+
+test("Not useful feedback auto-excludes a ruleId after threshold and generator respects it", async () => {
+  const autoCookie = await registerAndLogin(app, { email: "auto_excl_user@example.com" });
+  const autoUser = await User.findOne({ email: "auto_excl_user@example.com" }).lean();
+  const autoUserId = autoUser?._id;
+
+  const r1 = await Recommendation.create({
+    userId: autoUserId,
+    ruleId: "plastic_reduce",
+    title: "Plastic tip",
+    body: "Avoid single-use plastics this week by carrying reusables.",
+    impact: "Low",
+    saved: true,
+    evidence: { why: ["x"] },
+  });
+  const r2 = await Recommendation.create({
+    userId: autoUserId,
+    ruleId: "plastic_reduce",
+    title: "Plastic tip 2",
+    body: "Avoid single-use plastics this week by carrying reusables.",
+    impact: "Low",
+    saved: true,
+    evidence: { why: ["x"] },
+  });
+
+  const f1 = await request(app)
+    .patch(`/api/recommendations/${r1._id}/feedback`)
+    .set("Cookie", autoCookie)
+    .send({ rating: "not_useful" });
+  expect(f1.status).toBe(200);
+
+  const f2 = await request(app)
+    .patch(`/api/recommendations/${r2._id}/feedback`)
+    .set("Cookie", autoCookie)
+    .send({ rating: "not_useful" });
+  expect(f2.status).toBe(200);
+
+  const me = await request(app).get("/api/auth/me").set("Cookie", autoCookie);
+  expect(me.status).toBe(200);
+  expect(me.body?.data?.preferences?.recommendations?.excludedRuleIds).toContain("plastic_reduce");
+
+  const from = new Date("2026-08-01T00:00:00.000Z");
+  const to = new Date("2026-08-07T23:59:59.000Z");
+  await Habit.create({
+    userId: autoUserId,
+    type: "plastic_items",
+    value: 100,
+    emissionKg: 6,
+    date: new Date("2026-08-03T10:00:00.000Z"),
+  });
+
+  const gen = await request(app)
+    .get("/api/recommendations/generate")
+    .set("Cookie", autoCookie)
+    .query({ from: from.toISOString(), to: to.toISOString() });
+  expect(gen.status).toBe(200);
+  const tips = gen.body?.data?.tips || [];
+  expect(tips.some((t) => t.ruleId === "plastic_reduce")).toBe(false);
+});
+
+test("Observed impact is computed after doneAt window passes", async () => {
+  const obsCookie = await registerAndLogin(app, { email: "observed_user@example.com" });
+  const obsUser = await User.findOne({ email: "observed_user@example.com" }).lean();
+  const obsUserId = obsUser?._id;
+
+  const now = Date.now();
+  const doneAt = new Date(now - 8 * 24 * 60 * 60 * 1000);
+
+  // Seed emissions: before window (7d) higher than after window.
+  await EmissionEntry.create([
+    {
+      userId: obsUserId,
+      sourceType: "manual",
+      emissionKg: 20,
+      date: new Date(doneAt.getTime() - 2 * 24 * 60 * 60 * 1000),
+      notes: "before",
+    },
+    {
+      userId: obsUserId,
+      sourceType: "manual",
+      emissionKg: 10,
+      date: new Date(doneAt.getTime() + 2 * 24 * 60 * 60 * 1000),
+      notes: "after",
+    },
+  ]);
+
+  const rec = await Recommendation.create({
+    userId: obsUserId,
+    ruleId: "car_reduce",
+    title: "Obs rec",
+    body: "Try reducing your car usage for a week.",
+    impact: "High",
+    saved: true,
+    doneAt,
+    evidence: { why: ["x"] },
+  });
+
+  const res = await request(app).get("/api/recommendations").set("Cookie", obsCookie).query({ page: 1, limit: 10 });
+  expect(res.status).toBe(200);
+  const items = res.body?.data?.items || [];
+  const found = items.find((r) => String(r._id) === String(rec._id));
+  expect(found).toBeTruthy();
+  expect(found?.observedImpact?.computedAt).toBeTruthy();
+  expect(found?.observedImpact?.deltaKg).toBeCloseTo(10, 2);
 });
 
 test("PATCH /api/recommendations/:id/feedback enforces ownership", async () => {
@@ -474,4 +659,16 @@ test("DELETE /api/recommendations/:id deletes and enforces ownership", async () 
 
   const gone = await Recommendation.findById(saved._id).lean();
   expect(gone).toBeNull();
+});
+
+test("POST /api/recommendations/digest returns test_mode in NODE_ENV=test", async () => {
+  const res = await request(app)
+    .post("/api/recommendations/digest")
+    .set("Cookie", cookie)
+    .send({ periodDays: 7, maxTips: 2 });
+
+  expect(res.status).toBe(200);
+  expect(res.body?.data?.sent).toBe(false);
+  expect(res.body?.data?.reason).toBe("test_mode");
+  expect(typeof res.body?.data?.tipsCount).toBe("number");
 });

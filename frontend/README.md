@@ -68,7 +68,7 @@ Then call the bootstrap endpoint once (it only works if no admin exists yet):
 3) Output directory: `dist`
 4) Set environment variables:
 
-- `VITE_API_BASE_URL=https://https://ecotrack-8ad9.onrender.com/api`
+- `VITE_API_BASE_URL=https://ecotrack-8ad9.onrender.com/api`
 
 ## Deployment notes (cookies + CORS)
 
