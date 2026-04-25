@@ -3,7 +3,7 @@ import Navbar from "../components/Navbar";
 import Card from "../components/Card";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "../api/client";
-import { IconBox, IconLightbulb, IconRefresh, IconSave, IconSparkles, IconTrash, IconWarning } from "../components/Icons";
+import { IconBox, IconLightbulb, IconLocation, IconRefresh, IconSave, IconSparkles, IconTrash, IconWarning } from "../components/Icons";
 
 function pad2(n) {
   return String(n).padStart(2, "0");
@@ -19,6 +19,10 @@ function isoRangeFromDates(fromDate, toDate) {
   const to = new Date(toDate);
   to.setHours(23, 59, 59, 999);
   return { from: from.toISOString(), to: to.toISOString() };
+}
+
+function round2(n) {
+  return Math.round(Number(n) * 100) / 100;
 }
 
 export default function Recommendations() {
@@ -38,13 +42,60 @@ export default function Recommendations() {
   const [page, setPage] = useState(1);
   const limit = 6;
   const [savedMsg, setSavedMsg] = useState(null);
+  const [reportMsg, setReportMsg] = useState(null);
+  const [reportBusy, setReportBusy] = useState(false);
   const [whyOpen, setWhyOpen] = useState(() => new Set());
   const [savedWhyOpen, setSavedWhyOpen] = useState(() => new Set());
 
+  const [coords, setCoords] = useState(null);
+  const [coordsBusy, setCoordsBusy] = useState(false);
+  const [coordsErr, setCoordsErr] = useState(null);
+  const [region, setRegion] = useState(() => {
+    try {
+      return localStorage.getItem("ecotrack_region") || "";
+    } catch {
+      return "";
+    }
+  });
+
+  const regionTrimmed = useMemo(() => (region || "").trim(), [region]);
+
+  function filenameFromContentDisposition(headerValue, fallback) {
+    if (!headerValue || typeof headerValue !== "string") return fallback;
+    const m = headerValue.match(/filename\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i);
+    const raw = m?.[1] || m?.[2];
+    if (!raw) return fallback;
+    try {
+      return decodeURIComponent(raw);
+    } catch {
+      return raw;
+    }
+  }
+
+  async function downloadBlobAsFile(blob, filename) {
+    const url = URL.createObjectURL(blob);
+    try {
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    } finally {
+      URL.revokeObjectURL(url);
+    }
+  }
+
   const recQ = useQuery({
-    queryKey: ["recommendations", range],
-    queryFn: async () =>
-      (await api.get("/recommendations/generate", { params: range })).data.data,
+    queryKey: ["recommendations", range, coords, regionTrimmed],
+    queryFn: async () => {
+      const params = {
+        ...range,
+        ...(coords ? { lat: coords.lat, lon: coords.lon } : {}),
+        ...(regionTrimmed ? { region: regionTrimmed } : {}),
+      };
+      return (await api.get("/recommendations/generate", { params })).data.data;
+    },
   });
 
   const savedQ = useQuery({
@@ -62,6 +113,15 @@ export default function Recommendations() {
         impact: tip.impact,
         context: {
           weather: recQ.data?.weather || undefined,
+          airPollution: recQ.data?.evidence?.airPollution || undefined,
+          gridIntensityGPerKwh: recQ.data?.evidence?.gridIntensityGPerKwh || undefined,
+          location: coords
+            ? {
+                lat: coords.lat,
+                lon: coords.lon,
+                ...(regionTrimmed ? { region: regionTrimmed } : {}),
+              }
+            : undefined,
           range,
         },
         evidence: {
@@ -69,6 +129,8 @@ export default function Recommendations() {
           estimatedKgSaved: typeof tip.estimatedKgSaved === "number" ? tip.estimatedKgSaved : undefined,
           habits: recQ.data?.evidence?.habits || undefined,
           weather: recQ.data?.weather || undefined,
+          airPollution: recQ.data?.evidence?.airPollution || undefined,
+          gridIntensityGPerKwh: recQ.data?.evidence?.gridIntensityGPerKwh || undefined,
           goals: recQ.data?.evidence?.goals || undefined,
           range,
         },
@@ -153,14 +215,131 @@ export default function Recommendations() {
               </button>
             </div>
           </div>
+
+          <div className="mt-4 grid md:grid-cols-2 gap-3">
+            <div>
+              <div className="text-xs text-slate-400 mb-1">Optional location context (weather + air quality)</div>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  className="px-3 py-2 rounded-xl bg-gradient-to-r from-slate-800 to-slate-700 hover:from-slate-700 hover:to-slate-600 text-sm transition-all disabled:opacity-50"
+                  disabled={coordsBusy}
+                  onClick={() => {
+                    setCoordsErr(null);
+
+                    const geo = globalThis?.navigator?.geolocation;
+                    if (!geo?.getCurrentPosition) {
+                      setCoordsErr("Geolocation is not supported in this browser.");
+                      return;
+                    }
+
+                    setCoordsBusy(true);
+                    geo.getCurrentPosition(
+                      (pos) => {
+                        setCoordsBusy(false);
+                        const lat = Number(pos?.coords?.latitude);
+                        const lon = Number(pos?.coords?.longitude);
+                        if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+                          setCoordsErr("Could not read your location.");
+                          return;
+                        }
+                        setCoords({ lat: Number(lat.toFixed(5)), lon: Number(lon.toFixed(5)) });
+                      },
+                      (err) => {
+                        setCoordsBusy(false);
+                        setCoordsErr(err?.message || "Failed to get your location.");
+                      },
+                      { enableHighAccuracy: false, timeout: 8000, maximumAge: 5 * 60 * 1000 }
+                    );
+                  }}
+                >
+                  <span className="inline-flex items-center gap-2">
+                    <IconLocation width={16} height={16} />
+                    <span>{coords ? "Update location" : coordsBusy ? "Getting location…" : "Use my location"}</span>
+                  </span>
+                </button>
+
+                {coords ? (
+                  <button
+                    type="button"
+                    className="px-3 py-2 rounded-xl bg-gradient-to-r from-slate-900 to-slate-800 hover:from-slate-800 hover:to-slate-700 text-sm transition-all"
+                    onClick={() => setCoords(null)}
+                  >
+                    Clear
+                  </button>
+                ) : null}
+
+                {coords ? (
+                  <div className="text-xs text-slate-500">
+                    Using: {coords.lat.toFixed(3)}, {coords.lon.toFixed(3)}
+                  </div>
+                ) : null}
+              </div>
+
+              {coordsErr ? <div className="mt-1 text-xs text-red-200">{coordsErr}</div> : null}
+            </div>
+
+            <div>
+              <div className="text-xs text-slate-400 mb-1">Grid region id (optional)</div>
+              <input
+                value={region}
+                onChange={(e) => {
+                  const next = e.target.value;
+                  setRegion(next);
+                  try {
+                    localStorage.setItem("ecotrack_region", next);
+                  } catch {
+                    // ignore
+                  }
+                }}
+                placeholder="e.g. 1"
+                className="w-full bg-slate-900/50 border border-emerald-500/20 rounded-xl px-3 py-2 text-sm focus:border-emerald-500/40 focus:ring-2 focus:ring-emerald-500/20 transition-all"
+              />
+              <div className="mt-1 text-[11px] text-slate-500">Used to estimate electricity-related savings.</div>
+            </div>
+          </div>
+
+          <div className="mt-3 flex items-center justify-end">
+            <button
+              className="rounded-xl bg-gradient-to-r from-slate-800 to-slate-700 hover:from-slate-700 hover:to-slate-600 text-sm px-4 py-2 transition-all disabled:opacity-50"
+              disabled={reportBusy}
+              onClick={async () => {
+                setReportBusy(true);
+                try {
+                  const res = await api.get("/recommendations/report", { params: range, responseType: "blob" });
+                  const filename = filenameFromContentDisposition(
+                    res.headers?.["content-disposition"],
+                    `ecotrack-recommendations-report-${fromDate}-to-${toDate}.pdf`
+                  );
+                  await downloadBlobAsFile(res.data, filename);
+                  setReportMsg("Report downloaded.");
+                } catch {
+                  setReportMsg("Failed to download report.");
+                } finally {
+                  setReportBusy(false);
+                  setTimeout(() => setReportMsg(null), 2000);
+                }
+              }}
+              title="Download a PDF report of your saved recommendations"
+            >
+              {reportBusy ? "Preparing PDF…" : "Download PDF report"}
+            </button>
+          </div>
+
           <div className="mt-2 text-xs text-slate-500">
-            Tips are based on your logged habits in this range, plus optional weather context.
+            Tips are based on your logged habits in this range, plus optional weather/air-quality and grid-intensity context.
           </div>
         </Card>
 
         {savedMsg && (
           <div className="rounded-2xl border border-emerald-900 bg-emerald-950/30 text-emerald-200 px-4 py-3 text-sm">
             {savedMsg}
+          </div>
+        )}
+
+        {reportMsg && (
+          <div className="rounded-2xl border border-slate-800 bg-slate-900/30 text-slate-200 px-4 py-3 text-sm">
+            {reportMsg}
           </div>
         )}
 
@@ -329,6 +508,15 @@ export default function Recommendations() {
                   ) : null}
                   {r.rating ? <span>{" "}· Rated: {r.rating}</span> : null}
                 </div>
+
+                {typeof r?.observedImpact?.deltaKg === "number" && Number.isFinite(r.observedImpact.deltaKg) ? (
+                  <div
+                    className={`mt-2 text-xs ${r.observedImpact.deltaKg >= 0 ? "text-emerald-200" : "text-red-200"}`}
+                  >
+                    Observed impact ({r.observedImpact.windowDays || "?"}d): {r.observedImpact.deltaKg >= 0 ? "↓" : "↑"}{" "}
+                    {round2(Math.abs(r.observedImpact.deltaKg))} kg CO2e
+                  </div>
+                ) : null}
 
                 {(r?.context?.range?.from || r?.context?.weather?.condition) && (
                   <div className="mt-3 text-xs text-slate-500">

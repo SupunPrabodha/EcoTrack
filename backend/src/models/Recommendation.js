@@ -19,6 +19,16 @@ const recommendationSchema = new mongoose.Schema(
         condition: String,
         tempC: Number,
       },
+      airPollution: {
+        aqi: Number,
+        aqiLabel: String,
+      },
+      gridIntensityGPerKwh: Number,
+      location: {
+        lat: Number,
+        lon: Number,
+        region: String,
+      },
       range: {
         from: Date,
         to: Date,
@@ -36,14 +46,21 @@ const recommendationSchema = new mongoose.Schema(
       },
       habits: {
         car_km: { totalValue: Number, totalKg: Number },
+        public_transport_km: { totalValue: Number, totalKg: Number },
         electricity_kwh: { totalValue: Number, totalKg: Number },
         meat_meals: { totalValue: Number, totalKg: Number },
+        plastic_items: { totalValue: Number, totalKg: Number },
       },
       weather: {
         city: String,
         condition: String,
         tempC: Number,
       },
+      airPollution: {
+        aqi: Number,
+        aqiLabel: String,
+      },
+      gridIntensityGPerKwh: Number,
       goals: {
         activeGoalId: { type: mongoose.Schema.Types.ObjectId, ref: "Goal" },
         goalTitle: String,
@@ -64,9 +81,19 @@ const recommendationSchema = new mongoose.Schema(
 
     // Simple real-world workflow + feedback
     status: { type: String, enum: ["saved", "done", "dismissed"], default: "saved", index: true },
+    doneAt: { type: Date },
     dismissedUntil: { type: Date },
     rating: { type: String, enum: ["useful", "not_useful"] },
     feedbackNote: { type: String, trim: true, maxlength: 300 },
+
+    // Optional: observed (measured) impact after marking a recommendation done.
+    observedImpact: {
+      windowDays: { type: Number, min: 1, max: 365 },
+      beforeKg: { type: Number },
+      afterKg: { type: Number },
+      deltaKg: { type: Number },
+      computedAt: { type: Date },
+    },
 
     audit: {
       type: [
@@ -84,5 +111,6 @@ const recommendationSchema = new mongoose.Schema(
 
 recommendationSchema.index({ userId: 1, createdAt: -1 });
 recommendationSchema.index({ userId: 1, status: 1, dismissedUntil: 1, createdAt: -1 });
+recommendationSchema.index({ userId: 1, doneAt: 1, "observedImpact.computedAt": 1 });
 
 export const Recommendation = mongoose.model("Recommendation", recommendationSchema);

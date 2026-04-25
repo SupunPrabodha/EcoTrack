@@ -42,10 +42,38 @@ export default function Admin() {
   const [range, setRange] = useState(() => defaultRange());
   const [userSearch, setUserSearch] = useState("");
   const [userPage, setUserPage] = useState(1);
+  const [recsReportBusy, setRecsReportBusy] = useState(false);
+  const [recsReportMsg, setRecsReportMsg] = useState(null);
   const params = useMemo(
     () => ({ from: startOfDayIso(range.from), to: endOfDayIso(range.to) }),
     [range]
   );
+
+  function filenameFromContentDisposition(headerValue, fallback) {
+    if (!headerValue || typeof headerValue !== "string") return fallback;
+    const m = headerValue.match(/filename\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i);
+    const raw = m?.[1] || m?.[2];
+    if (!raw) return fallback;
+    try {
+      return decodeURIComponent(raw);
+    } catch {
+      return raw;
+    }
+  }
+
+  async function downloadBlobAsFile(blob, filename) {
+    const url = URL.createObjectURL(blob);
+    try {
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    } finally {
+      URL.revokeObjectURL(url);
+    }
+  }
 
   const usersParams = useMemo(
     () => ({ page: userPage, limit: 10, ...(userSearch ? { search: userSearch } : {}) }),
@@ -270,6 +298,42 @@ export default function Admin() {
         </Card>
 
         <Card title="Recommendation effectiveness (by ruleId)">
+          <div className="flex items-center justify-end mb-3">
+            <button
+              className="rounded-xl bg-gradient-to-r from-slate-800 to-slate-700 hover:from-slate-700 hover:to-slate-600 text-sm px-4 py-2 transition-all disabled:opacity-50"
+              disabled={recsReportBusy}
+              onClick={async () => {
+                setRecsReportBusy(true);
+                try {
+                  const res = await api.get("/admin/reports/recommendations", {
+                    params: { ...params, limit: 20 },
+                    responseType: "blob",
+                  });
+                  const filename = filenameFromContentDisposition(
+                    res.headers?.["content-disposition"],
+                    `ecotrack-admin-recommendations-report-${range.from}-to-${range.to}.pdf`
+                  );
+                  await downloadBlobAsFile(res.data, filename);
+                  setRecsReportMsg("Report downloaded.");
+                } catch {
+                  setRecsReportMsg("Failed to download report.");
+                } finally {
+                  setRecsReportBusy(false);
+                  setTimeout(() => setRecsReportMsg(null), 2000);
+                }
+              }}
+              title="Download a PDF report of global recommendation effectiveness"
+            >
+              {recsReportBusy ? "Preparing PDF…" : "Download PDF report"}
+            </button>
+          </div>
+
+          {recsReportMsg && (
+            <div className="mb-3 rounded-2xl border border-slate-800 bg-slate-900/30 text-slate-200 px-4 py-3 text-sm">
+              {recsReportMsg}
+            </div>
+          )}
+
           {recsQ.isLoading ? (
             <div className="text-sm text-slate-400">Loading…</div>
           ) : (recsQ.data?.byRule || []).length === 0 ? (

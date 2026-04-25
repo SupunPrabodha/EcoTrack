@@ -9,6 +9,7 @@ import Goals from "./pages/Goals";
 import Recommendations from "./pages/Recommendations";
 import Admin from "./pages/Admin";
 import Map from "./pages/Map";
+import EmissionsAnalytics from "./pages/EmissionsAnalytics";
 
 export default function App() {
   return (
@@ -17,6 +18,7 @@ export default function App() {
       <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
       <Route path="/habits" element={<ProtectedRoute><Habits /></ProtectedRoute>} />
       <Route path="/emissions" element={<ProtectedRoute><Emissions /></ProtectedRoute>} />
+      <Route path="/emissions/analytics" element={<ProtectedRoute><EmissionsAnalytics /></ProtectedRoute>} />
       <Route path="/goals" element={<ProtectedRoute><Goals /></ProtectedRoute>} />
       <Route path="/recommendations" element={<ProtectedRoute><Recommendations /></ProtectedRoute>} />
       <Route path="/map" element={<ProtectedRoute><Map /></ProtectedRoute>} />

@@ -4,10 +4,12 @@ import { validate } from "../middlewares/validate.js";
 import { requireAuth } from "../middlewares/auth.js";
 import {
   recommendationsDeleteCtrl,
+  recommendationsDigestCtrl,
   recommendationsFeedbackCtrl,
   recommendationsGenerateCtrl,
   recommendationsGetCtrl,
   recommendationsListCtrl,
+  recommendationsReportCtrl,
   recommendationsSaveCtrl,
   recommendationsUpdateCtrl,
 } from "../controllers/recommendations.controller.js";
@@ -28,8 +30,54 @@ const generateSchema = z.object({
   query: z.object({
     from: z.string().datetime(),
     to: z.string().datetime(),
+    lat: z.coerce.number().min(-90).max(90).optional(),
+    lon: z.coerce.number().min(-180).max(180).optional(),
+    region: z.string().max(50).optional(),
+  }),
+}).refine(
+  (r) =>
+    (r.query.lat === undefined && r.query.lon === undefined) ||
+    (typeof r.query.lat === "number" && typeof r.query.lon === "number"),
+  { message: "lat and lon must be provided together" }
+);
+
+const reportSchema = z.object({
+  body: z.object({}).optional(),
+  params: z.object({}),
+  query: z.object({
+    from: z.string().datetime(),
+    to: z.string().datetime(),
   }),
 });
+
+const digestSchema = z
+  .object({
+    body: z
+      .object({
+        from: z.string().datetime().optional(),
+        to: z.string().datetime().optional(),
+        periodDays: z.number().int().min(1).max(31).optional(),
+        maxTips: z.number().int().min(1).max(10).optional(),
+        lat: z.number().min(-90).max(90).optional(),
+        lon: z.number().min(-180).max(180).optional(),
+        region: z.string().max(50).optional(),
+      })
+      .default({}),
+    params: z.object({}),
+    query: z.object({}),
+  })
+  .refine(
+    (r) =>
+      (r.body.from === undefined && r.body.to === undefined) ||
+      (typeof r.body.from === "string" && typeof r.body.to === "string"),
+    { message: "from and to must be provided together" }
+  )
+  .refine(
+    (r) =>
+      (r.body.lat === undefined && r.body.lon === undefined) ||
+      (typeof r.body.lat === "number" && typeof r.body.lon === "number"),
+    { message: "lat and lon must be provided together" }
+  );
 
 const saveSchema = z.object({
   body: z.object({
@@ -44,6 +92,20 @@ const saveSchema = z.object({
             city: z.string().optional(),
             condition: z.string().optional(),
             tempC: z.number().optional(),
+          })
+          .optional(),
+        airPollution: z
+          .object({
+            aqi: z.number().int().min(1).max(5).optional(),
+            aqiLabel: z.string().max(30).optional(),
+          })
+          .optional(),
+        gridIntensityGPerKwh: z.number().min(0).optional(),
+        location: z
+          .object({
+            lat: z.number().min(-90).max(90),
+            lon: z.number().min(-180).max(180),
+            region: z.string().max(50).optional(),
           })
           .optional(),
         range: z
@@ -62,8 +124,10 @@ const saveSchema = z.object({
         habits: z
           .object({
             car_km: z.object({ totalValue: z.number(), totalKg: z.number() }).optional(),
+            public_transport_km: z.object({ totalValue: z.number(), totalKg: z.number() }).optional(),
             electricity_kwh: z.object({ totalValue: z.number(), totalKg: z.number() }).optional(),
             meat_meals: z.object({ totalValue: z.number(), totalKg: z.number() }).optional(),
+            plastic_items: z.object({ totalValue: z.number(), totalKg: z.number() }).optional(),
           })
           .optional(),
         weather: z
@@ -73,6 +137,13 @@ const saveSchema = z.object({
             tempC: z.number().optional(),
           })
           .optional(),
+        airPollution: z
+          .object({
+            aqi: z.number().int().min(1).max(5).optional(),
+            aqiLabel: z.string().max(30).optional(),
+          })
+          .optional(),
+        gridIntensityGPerKwh: z.number().min(0).optional(),
         goals: z
           .object({
             activeGoalId: z.string().min(10).optional(),
@@ -138,6 +209,8 @@ const feedbackSchema = z.object({
 });
 
 router.get("/generate", validate(generateSchema), recommendationsGenerateCtrl);
+router.get("/report", validate(reportSchema), recommendationsReportCtrl);
+router.post("/digest", validate(digestSchema), recommendationsDigestCtrl);
 
 router.post("/", validate(saveSchema), recommendationsSaveCtrl);
 router.get("/", validate(listSchema), recommendationsListCtrl);
@@ -151,7 +224,11 @@ router.delete("/:id", validate(idSchema), recommendationsDeleteCtrl);
  * /recommendations/generate:
  *   get:
  *     tags: [Recommendations]
- *     summary: Generate recommendations based on a date range (and optional weather context)
+ *     summary: Generate recommendations based on a date range
+ *     description: |
+ *       Optional context:
+ *       - Provide `lat` and `lon` together to use local weather + air quality.
+ *       - Provide `region` (Carbon Intensity region id) to use local grid intensity when estimating electricity savings.
  *     security:
  *       - cookieAuth: []
  *       - bearerAuth: []
@@ -164,9 +241,114 @@ router.delete("/:id", validate(idSchema), recommendationsDeleteCtrl);
  *         name: to
  *         required: true
  *         example: "2026-02-14T23:59:59.000Z"
+ *       - in: query
+ *         name: lat
+ *         required: false
+ *         description: Latitude (must be provided together with `lon`).
+ *         schema:
+ *           type: number
+ *           minimum: -90
+ *           maximum: 90
+ *         example: 51.5
+ *       - in: query
+ *         name: lon
+ *         required: false
+ *         description: Longitude (must be provided together with `lat`).
+ *         schema:
+ *           type: number
+ *           minimum: -180
+ *           maximum: 180
+ *         example: -0.12
+ *       - in: query
+ *         name: region
+ *         required: false
+ *         description: Optional Carbon Intensity region id.
+ *         schema:
+ *           type: string
+ *           maxLength: 50
+ *         example: "1"
  *     responses:
  *       200:
  *         description: OK
+ *       400:
+ *         description: Validation failed
+ */
+
+/**
+ * @openapi
+ * /recommendations/digest:
+ *   post:
+ *     tags: [Recommendations]
+ *     summary: Send a short recommendations digest email
+ *     description: |
+ *       Builds tips for a given date range (or last N days) and emails a digest to the signed-in user.
+ *
+ *       Notes:
+ *       - Provide `from` and `to` together, OR omit both and use `periodDays` (default 7).
+ *       - Provide `lat` and `lon` together to use local weather + air quality.
+ *       - In `NODE_ENV=test`, the endpoint returns `{ sent: false, reason: "test_mode" }`.
+ *     security:
+ *       - cookieAuth: []
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: false
+ *       content:
+ *         application/json:
+ *           examples:
+ *             last7Days:
+ *               value:
+ *                 periodDays: 7
+ *                 maxTips: 3
+ *             explicitRangeWithLocation:
+ *               value:
+ *                 from: "2026-02-01T00:00:00.000Z"
+ *                 to: "2026-02-14T23:59:59.000Z"
+ *                 lat: 51.5
+ *                 lon: -0.12
+ *                 region: "1"
+ *                 maxTips: 3
+ *     responses:
+ *       200:
+ *         description: OK
+ *       400:
+ *         description: Validation failed
+ */
+
+/**
+ * @openapi
+ * /recommendations/report:
+ *   get:
+ *     tags: [Recommendations]
+ *     summary: Download a PDF report of your saved recommendations for a date range
+ *     description: |
+ *       Returns a professional PDF report summarizing your saved recommendations and feedback in the selected range.
+ *
+ *       Report sections (high-level):
+ *       - Report context (date range + generated timestamp)
+ *       - Summary KPIs (counts and basic rates)
+ *       - Recent saved recommendations (sample list)
+ *
+ *       The response is sent as a downloadable attachment (`Content-Disposition: attachment`).
+ *     security:
+ *       - cookieAuth: []
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: from
+ *         required: true
+ *         example: "2026-02-01T00:00:00.000Z"
+ *       - in: query
+ *         name: to
+ *         required: true
+ *         example: "2026-02-28T23:59:59.000Z"
+ *     responses:
+ *       200:
+ *         description: PDF report
+ *         content:
+ *           application/pdf:
+ *             schema:
+ *               type: string
+ *               format: binary
  *       400:
  *         description: Validation failed
  */

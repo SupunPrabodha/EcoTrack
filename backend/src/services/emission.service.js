@@ -15,23 +15,16 @@ function toObjectIdIfPossible(id) {
 }
 
 export async function calculateEmission({ habitType, value, date, region }) {
-	console.log("came inside calculateemission function");
-	
 	if (typeof value !== "number" || value < 0) {
 		return { emissionKg: 0, method: "invalid_input" };
 	}
 
 	// 1) Climatiq (best-effort, only for supported types)
 	const climatiqKg = await estimateClimatiqKg({ habitType, value, date });
-	console.log("came inside estimateClimatiqKg function climateiqkg="+climatiqKg);
-	
 	if (typeof climatiqKg === "number" && climatiqKg >= 0) {
-		console.log("came inside the climatiqkg if");
-		
 		return { emissionKg: round3(climatiqKg), method: "climatiq" };
 	}
-	console.log("im still ine the function");
-	
+
 	// 2) Carbon Intensity (meaningful for electricity)
 	if (habitType === "electricity_kwh") {
 		const intensity = await getGridCarbonIntensity({ region }); // gCO2/kWh
@@ -47,8 +40,8 @@ export async function calculateEmission({ habitType, value, date, region }) {
 		return { emissionKg: round3(value * factor), method: "local_factor" };
 	}
 
-		return { emissionKg: 0, method: "unknown_type" };
-	}
+	return { emissionKg: 0, method: "unknown_type" };
+}
 
 // Backwards-compatible helper (existing code expects calculateEmissionKg(type, value))
 export async function calculateEmissionKg(habitType, value, date) {
@@ -67,8 +60,6 @@ export async function createEmissionEntry({ userId, sourceType, habitType, value
 	if (finalKg === undefined || finalKg === null) {
 		if (!habitType || typeof value !== "number") throw new ApiError(400, "habitType and value required when emissionKg is omitted");
 		const calc = await calculateEmission({ habitType, value, date: entryDate, region });
-		console.log("calculated using calculateEmission()");
-		
 		finalKg = calc.emissionKg;
 		method = calc.method;
 	}
@@ -189,7 +180,9 @@ export async function getEmissionSummary({ userId, from, to }) {
 	};
 }
 
-export async function getEmissionTrends({ userId, from, to }) {
+export async function getEmissionTrends({ userId, from, to, timezone = "UTC" }) {
+	// Default to UTC grouping for backwards compatibility.
+	// Callers (e.g., monthly reports) can pass a timezone offset like "+05:30".
 	const match = { userId: toObjectIdIfPossible(userId) };
 	if (from || to) {
 		match.date = {};
@@ -206,7 +199,7 @@ export async function getEmissionTrends({ userId, from, to }) {
 					$dateToString: {
 						format: "%Y-%m-%d",
 						date: "$date",
-						timezone: "UTC",
+						timezone,
 					},
 				},
 				totalKg: { $sum: "$emissionKg" },

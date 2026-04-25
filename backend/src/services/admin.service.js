@@ -175,6 +175,7 @@ export async function getGlobalRecommendationAnalytics({ from, to, limit = 20 })
           useful: { $sum: { $cond: [{ $eq: ["$rating", "useful"] }, 1, 0] } },
           notUseful: { $sum: { $cond: [{ $eq: ["$rating", "not_useful"] }, 1, 0] } },
           avgEstimatedKgSaved: { $avg: { $ifNull: ["$evidence.estimatedKgSaved", 0] } },
+          avgObservedDeltaKg: { $avg: "$observedImpact.deltaKg" },
         },
       },
       {
@@ -188,6 +189,7 @@ export async function getGlobalRecommendationAnalytics({ from, to, limit = 20 })
           useful: 1,
           notUseful: 1,
           avgEstimatedKgSaved: 1,
+          avgObservedDeltaKg: 1,
         },
       },
     ]),
@@ -205,6 +207,7 @@ export async function getGlobalRecommendationAnalytics({ from, to, limit = 20 })
           useful: { $sum: { $cond: [{ $eq: ["$rating", "useful"] }, 1, 0] } },
           notUseful: { $sum: { $cond: [{ $eq: ["$rating", "not_useful"] }, 1, 0] } },
           avgEstimatedKgSaved: { $avg: { $ifNull: ["$evidence.estimatedKgSaved", 0] } },
+          avgObservedDeltaKg: { $avg: "$observedImpact.deltaKg" },
           lastCreatedAt: { $max: "$createdAt" },
         },
       },
@@ -220,6 +223,7 @@ export async function getGlobalRecommendationAnalytics({ from, to, limit = 20 })
           useful: 1,
           notUseful: 1,
           avgEstimatedKgSaved: 1,
+          avgObservedDeltaKg: 1,
           lastCreatedAt: 1,
         },
       },
@@ -237,6 +241,7 @@ export async function getGlobalRecommendationAnalytics({ from, to, limit = 20 })
     useful: 0,
     notUseful: 0,
     avgEstimatedKgSaved: 0,
+    avgObservedDeltaKg: null,
   };
 
   const byRule = (byRuleRows || []).map((r) => {

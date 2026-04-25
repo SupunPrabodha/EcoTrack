@@ -80,7 +80,8 @@ export async function getAirPollution(lat, lon) {
       so2: 3.1,
     };
   }
-  if (!env.OPENWEATHER_API_KEY || !lat || !lon) return null;
+  if (!env.OPENWEATHER_API_KEY) return null;
+  if (typeof lat !== "number" || !Number.isFinite(lat) || typeof lon !== "number" || !Number.isFinite(lon)) return null;
 
   const cacheKey = `${lat.toFixed(2)},${lon.toFixed(2)}`;
   const now = Date.now();
@@ -128,7 +129,8 @@ export async function getWeatherByCoords(lat, lon) {
       lon,
     };
   }
-  if (!env.OPENWEATHER_API_KEY || !lat || !lon) return null;
+  if (!env.OPENWEATHER_API_KEY) return null;
+  if (typeof lat !== "number" || !Number.isFinite(lat) || typeof lon !== "number" || !Number.isFinite(lon)) return null;
 
   try {
     const { data } = await openWeather.get("/data/2.5/weather", {
@@ -173,7 +175,8 @@ export async function getNearbyPlacesWeather(lat, lon, { cnt = 12 } = {}) {
       };
     });
   }
-  if (!env.OPENWEATHER_API_KEY || !lat || !lon) return [];
+  if (!env.OPENWEATHER_API_KEY) return [];
+  if (typeof lat !== "number" || !Number.isFinite(lat) || typeof lon !== "number" || !Number.isFinite(lon)) return [];
 
   const safeCnt = Math.max(1, Math.min(30, Number(cnt) || 12));
   const cacheKey = `${lat.toFixed(2)},${lon.toFixed(2)},${safeCnt}`;
@@ -228,8 +231,7 @@ export async function getNearbyPlacesWeather(lat, lon, { cnt = 12 } = {}) {
 export async function getGridCarbonIntensity({ region } = {}) {
   if (IS_TEST) return 123;
 	const regionId = (region || env.CARBON_INTENSITY_REGION || "").trim();
-  console.log(regionId);
-  
+
 	const cacheKey = regionId || "__national__";
 	const now = Date.now();
 	const cached = cache.gridIntensity.get(cacheKey);
@@ -337,8 +339,6 @@ export async function estimateClimatiqKg({ habitType, value, date }) {
   if (!env.CLIMATIQ_API_KEY) return null;
 
   let payload = null;
-  console.log("habit type " + habitType);
-  
 
   if (habitType === "electricity_kwh") {
     payload = {
@@ -354,8 +354,6 @@ export async function estimateClimatiqKg({ habitType, value, date }) {
   }
 
   if (habitType === "car_km") {
-    console.log("im inside car_km if");
-    
     payload = {
       emission_factor: {
         activity_id: "passenger_vehicle-vehicle_type_business_travel_car-fuel_source_na-engine_size_na-vehicle_age_na-vehicle_weight_na",
@@ -367,9 +365,6 @@ export async function estimateClimatiqKg({ habitType, value, date }) {
       }
     };
   }
-
-  console.log("paylood"+payload);
-  
 
   // For types we don't support via Climatiq, caller falls back.
   if (!payload) return null;
@@ -388,8 +383,6 @@ export async function estimateClimatiqKg({ habitType, value, date }) {
     const kg = data?.co2e;
     return typeof kg === "number" ? kg : null;
   } catch {
-    console.log("came into catch");
-    
     return null;
   }
 }

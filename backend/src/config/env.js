@@ -60,4 +60,11 @@ export const env = {
   // Recommendations
   // Prevents repeating the same ruleId too frequently for the same user.
   RECOMMENDATION_RULE_COOLDOWN_DAYS: num("RECOMMENDATION_RULE_COOLDOWN_DAYS", 7),
+
+  // Auto-personalization: after repeated negative feedback, hide a ruleId for the user.
+  RECOMMENDATION_AUTO_EXCLUDE_NOT_USEFUL_COUNT: num("RECOMMENDATION_AUTO_EXCLUDE_NOT_USEFUL_COUNT", 2),
+  RECOMMENDATION_AUTO_EXCLUDE_LOOKBACK_DAYS: num("RECOMMENDATION_AUTO_EXCLUDE_LOOKBACK_DAYS", 365),
+
+  // Observed impact: compare emissions before/after a completion action.
+  RECOMMENDATION_OBSERVED_IMPACT_WINDOW_DAYS: num("RECOMMENDATION_OBSERVED_IMPACT_WINDOW_DAYS", 7),
 };
